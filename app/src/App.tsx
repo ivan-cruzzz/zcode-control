@@ -55,6 +55,29 @@ export default function App() {
     applyTheme(s.theme);
     setHapticsEnabled(s.haptics);
 
+    // глубокая ссылка из Telegram: t.me/<bot>?startapp=<base64url(адрес моста)> —
+    // мост присылает такую кнопку при каждом подъёме туннеля, адрес всегда свежий
+    let tunnelNote: string | null = null;
+    try {
+      const sp = (tg as any)?.initDataUnsafe?.start_param;
+      if (sp) {
+        const decoded = atob(sp.replace(/-/g, "+").replace(/_/g, "/"));
+        if (/^https:\/\//i.test(decoded) && decoded !== s.apiUrl) {
+          s.apiUrl = decoded;
+          patchSettings({ apiUrl: decoded });
+          tunnelNote = decoded;
+        }
+      }
+    } catch { /* битый start_param — игнорируем */ }
+    if (tunnelNote) {
+      setConsoleMsgs([{
+        id: "boot",
+        role: "assistant",
+        text: `Подключено по ссылке из Telegram:\n${tunnelNote}`,
+        time: Date.now(),
+      }]);
+    }
+
     const handlers = {
       onStatus: (st: ClientStatus) => setStatus(st),
       onEvent: (e: { type: string; scope?: string }) => {

@@ -3,6 +3,9 @@
 *.local
 server/.env
 server/.owner.json
+server/.tg-chat.json
+server/.tg-offset
+server/bin/
 
 # зависимости и сборка
 node_modules/

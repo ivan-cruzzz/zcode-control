@@ -4,11 +4,13 @@
    на вашем компьютере, и никогда не попадает в репозиторий или клиент. */
 
 import http from "node:http";
+import { execSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
+import { Tunnel, BotLink } from "./tunnel.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -212,7 +214,7 @@ async function handle(req, res) {
   const url = new URL(req.url, "http://localhost");
 
   if (req.method === "GET" && url.pathname === "/health") {
-    sendJson(res, 200, { ok: true, mode: adapter.mode, version: "1.0.0" });
+    sendJson(res, 200, { ok: true, mode: adapter.mode, version: "1.0.0", tunnel: tunnelUrl });
     return;
   }
 
@@ -315,6 +317,11 @@ async function handle(req, res) {
       const dbOk = CONFIG.demo ? true : (adapter.dbOk ?? false);
       const status = await adapter.setupStatus({ dbOk, mode: adapter.mode });
       status.ownerPaired = !!loadOwner();
+      status.tunnel = {
+        url: tunnelUrl,
+        botChatPaired: botLink ? botLink.paired : false,
+        botConflict: botLink ? botLink.conflict : false,
+      };
       sendJson(res, 200, { ok: true, ...status });
     } else {
       sendJson(res, 404, { ok: false, error: "Not found" });
@@ -409,8 +416,52 @@ server.listen(CONFIG.port, () => {
   else log("белый список id не задан — пройдёт любой пользователь с валидной подписью (можно ограничить через ALLOWED_USER_IDS)");
 });
 
+/* ---------- автотуннель + кнопка в боте (настоящее подключение) ---------- */
+
+export let tunnelUrl = null;
+let botLink = null;
+let tunnel = null;
+
+async function startExposure() {
+  if (process.argv.includes("--no-expose") || process.env.EXPOSE === "0") {
+    log("автотуннель отключён (--no-expose)");
+    return;
+  }
+  const candidates = [process.env.CLOUDFLARED_PATH, "cloudflared", path.join(__dirname, "bin", "cloudflared.exe")].filter(Boolean);
+  const bin = candidates.find((p) => {
+    try {
+      if (fs.existsSync(p)) return true;
+      execSync(`where "${p}"`, { stdio: "pipe" });
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  if (!bin) {
+    log("cloudflared не найден: winget install Cloudflare.cloudflared — и перезапустить мост");
+    return;
+  }
+  tunnel = new Tunnel({ port: CONFIG.port, bin });
+  botLink = new BotLink({ token: CONFIG.botToken, dir: __dirname, log });
+  botLink.startPolling();
+
+  const url = await tunnel.start();
+  if (url) {
+    tunnelUrl = url;
+    log(`туннель: ${url}`);
+    log("если бот в Telegram ещё не связан — отправьте ему /start, придёт кнопка открытия");
+    await botLink.announce(url);
+  } else {
+    log("туннель не поднялся — адрес можно указать вручную любым способом (cloudflared/ngrok)");
+  }
+}
+
+startExposure();
+
 function shutdown() {
   log("остановка…");
+  try { tunnel?.stop(); } catch { /* noop */ }
+  try { botLink?.stop(); } catch { /* noop */ }
   try { adapter.stop(); } catch { /* noop */ }
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 2_000).unref();
