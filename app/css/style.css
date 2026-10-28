@@ -1155,6 +1155,59 @@ select.input {
 
 .danger-zone { margin-top: 18px; }
 
+/* ---------- Подключение (мастер) ---------- */
+
+.setup-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.setup-card.all-done {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, var(--accent-soft), var(--bg-2) 60%);
+}
+.setup-title {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  margin-bottom: 10px;
+}
+.setup-card.all-done .setup-title { color: var(--accent); }
+
+.setup-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.setup-row:last-child { border-bottom: 0; }
+.setup-icon { flex: none; margin-top: 2px; display: grid; place-items: center; }
+.setup-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.setup-label { font-size: 14px; font-weight: 600; }
+.setup-hint { font-size: 12px; color: var(--text-2); margin-top: 1px; }
+.setup-btn { height: 34px; padding: 0 14px; font-size: 13px; flex: none; align-self: center; }
+
+.setup-step {
+  padding: 7px 0;
+  font-size: 13.5px;
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.setup-step:last-child { border-bottom: 0; }
+.setup-step code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--bg-3);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
 /* ---------- Уважение к настройкам пользователя ---------- */
 
 @media (prefers-reduced-motion: reduce) {

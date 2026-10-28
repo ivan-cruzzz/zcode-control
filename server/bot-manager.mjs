@@ -26,6 +26,11 @@ export class BotManager {
     this.locksDir = path.join(this.dir, "bots-runtime-locks", "telegram-polling");
     this.watchTimer = null;
     this._lastMtime = 0;
+    this._tokenBot = null; // {id, username, displayName} — кто наш бот по токену
+  }
+
+  setTokenBot(me) {
+    this._tokenBot = me ? { id: String(me.id), username: me.username, displayName: me.displayName ?? me.first_name ?? null } : null;
   }
 
   start() {
@@ -156,6 +161,33 @@ export class BotManager {
     this._lastMtime = this._configMtime();
     this.events.emit("refresh", { scope: "bots" });
     return { deleted: id };
+  }
+
+  /* Состояние подключения ZCODE ↔ мини-апп для экрана-чеклиста.
+     ownerPaired заполняется в bridge.mjs (файл владельца у него). */
+  async setupStatus({ dbOk, mode } = {}) {
+    const cfg = this._readConfigSilent();
+    const polling = this._pollingActive();
+    const bot = this._tokenBot;
+    const linked = !!(bot && cfg.bots.some((b) => String(b.providerUserId) === bot.id));
+    const linkedBot = linked ? cfg.bots.find((b) => String(b.providerUserId) === bot.id) : null;
+    return {
+      bridge: { ok: true, mode: mode || "zcode", dbOk: !!dbOk },
+      ownerPaired: null,
+      bot: {
+        verified: !!bot,
+        id: bot?.id ?? null,
+        username: bot?.username ?? null,
+        displayName: bot?.displayName ?? null,
+        linkedInZcode: linked,
+        enabledInZcode: linked ? !!linkedBot?.enabled : false,
+        polling,
+      },
+    };
+  }
+
+  _readConfigSilent() {
+    try { return this._readConfig(); } catch { return { bots: [] }; }
   }
 
   /* Проверка токена BotFather из мини-аппа: мост вызывает getMe.

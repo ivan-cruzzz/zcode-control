@@ -198,4 +198,7 @@ export class BridgeClient {
   async pair() {
     return postJson(`${this.baseUrl}/api/pair`, { initData: this.initData });
   }
+  async setup() {
+    return postJson(`${this.baseUrl}/api/setup`, { initData: this.initData });
+  }
 }

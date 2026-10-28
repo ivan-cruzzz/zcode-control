@@ -24,6 +24,7 @@ export class ZcodeAdapter {
 
   start() {
     this.db = new DatabaseSync(this.dbPath, { readOnly: true });
+    this.dbOk = true;
     this.botManager.events.on("refresh", (ev) => this.events.emit("refresh", ev));
     this.botManager.start();
     this._poll();
@@ -133,6 +134,10 @@ export class ZcodeAdapter {
 
   async botLink({ token }) {
     return this.botManager.linkBot({ token });
+  }
+
+  async setupStatus(opts) {
+    return this.botManager.setupStatus(opts);
   }
 
   async projects() {

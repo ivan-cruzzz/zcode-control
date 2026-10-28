@@ -120,7 +120,7 @@ function createClient() {
       if (ev.scope === "all") refreshAll();
       else if (ev.scope === "overview") loadOverview();
       else if (ev.scope === "sessions") loadSessions();
-      else if (ev.scope === "bots") loadBots();
+      else if (ev.scope === "bots") { loadBots(); loadSetup(); }
       else if (ev.scope === "session" && ev.id && state.detailOpen && state.detailId === ev.id) loadDetail(ev.id);
     },
   };
@@ -168,6 +168,7 @@ async function connectClient() {
 function refreshAll() {
   loadOverview();
   loadSessions();
+  if (!state.isDemo) loadSetup();
   if (state.statsLoaded) loadStats();
   if (state.botsLoaded) loadBots();
   if (state.detailOpen && state.detailKind === "session" && state.detailId) loadDetail(state.detailId);
@@ -413,6 +414,130 @@ function clearGlobalSearch() {
   state.searchSeq += 1;
   $("globalTitle").hidden = true;
   $("globalList").innerHTML = "";
+}
+
+/* ============================ Подключение (мастер) ============================ */
+
+async function loadSetup() {
+  if (state.isDemo) { $("ovSetup").innerHTML = ""; return; }
+  try {
+    const data = await state.client.setup();
+    renderSetup(data);
+  } catch { /* мост ответит в следующий раз */ }
+}
+
+function setupRow(done, label, hint, action) {
+  const icon = done
+    ? `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/></svg>`
+    : `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color:var(--warn)" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>`;
+  return `
+    <div class="setup-row">
+      <span class="setup-icon">${icon}</span>
+      <span class="setup-text">
+        <span class="setup-label">${esc(label)}</span>
+        ${hint ? `<span class="setup-hint">${esc(hint)}</span>` : ""}
+      </span>
+      ${action || ""}
+    </div>`;
+}
+
+function renderSetup(data) {
+  const { bridge, ownerPaired, bot } = data;
+  const allDone = ownerPaired && bridge.dbOk && bot.linkedInZcode && bot.polling && bot.enabledInZcode;
+
+  if (allDone) {
+    $("ovSetup").innerHTML = `
+      <div class="setup-card all-done">
+        <div class="setup-title">Всё подключено</div>
+        <p class="hint-row" style="margin:6px 0 0">ZCODE управляется с телефона: команды — в чат <b>@${esc(bot.username)}</b>, панель наблюдения — здесь.</p>
+      </div>`;
+    return;
+  }
+
+  const rows = [
+    setupRow(true, "Мост запущен", `режим: ${bridge.mode}`),
+    setupRow(bridge.dbOk, bridge.dbOk ? "База ZCODE найдена" : "База ZCODE не найдена",
+      bridge.dbOk ? "чтение включено" : "запустите мост рядом с ZCODE"),
+    setupRow(ownerPaired, ownerPaired ? "Владелец закреплён" : "Владелец не закреплён",
+      ownerPaired ? "доступ только у вас" : "мост открыт — зафиксируйте его за собой",
+      ownerPaired ? "" : `<button class="btn btn-ghost setup-btn" type="button" data-setup-action="pair">Закрепить</button>`),
+  ];
+
+  if (bot.verified) {
+    rows.push(setupRow(bot.linkedInZcode,
+      bot.linkedInZcode ? `Бот @${bot.username} в ZCode` : `Бот @${bot.username} не привязан к ZCode`,
+      bot.linkedInZcode ? (bot.enabledInZcode ? "привязан и включён" : "привязан, но выключен") : "одна вставка токена в панели Bots",
+      bot.linkedInZcode ? "" : `<button class="btn btn-accent setup-btn" type="button" data-setup-action="guide">Привязать</button>`));
+    rows.push(setupRow(bot.polling && bot.enabledInZcode, "Поллинг Telegram",
+      bot.polling ? "живой канал активен" : bot.linkedInZcode && !bot.enabledInZcode ? "включите бота тумблером во вкладке Боты" : "включится после привязки"));
+  } else {
+    rows.push(setupRow(false, "Токен бота не настроен", "мост не смог проверить токен в .env"));
+  }
+
+  $("ovSetup").innerHTML = `
+    <div class="setup-card">
+      <div class="setup-title">Подключение ZCODE</div>
+      ${rows.join("")}
+    </div>`;
+}
+
+async function setupAction(action) {
+  if (action === "pair") {
+    try {
+      await state.client.pair();
+      haptic.notify("success");
+      showToast("Мост закреплён за вашим аккаунтом", "ok");
+      loadSetup();
+    } catch (e) {
+      showToast("Ошибка: " + e.message, "err");
+    }
+    return;
+  }
+  if (action === "guide") openSetupGuide();
+}
+
+function openSetupGuide() {
+  const bot = state.client?.mode === "demo" ? { username: "demo_helper_bot" } : null;
+  state.detailKind = "guide";
+  state.detailOpen = true;
+  state.detailId = null;
+  const detail = $("detail");
+  detail.hidden = false;
+  requestAnimationFrame(() => detail.classList.add("open"));
+  tg?.BackButton?.show?.();
+  $("detailTitle").textContent = "Привязать бота к ZCODE";
+  $("detailBody").innerHTML = `
+    <div class="card">
+      <h3 class="card-title">Зачем это нужно</h3>
+      <p class="hint-row" style="margin:0">После привязки ZCode сам принимает сообщения этого бота: вы пишете команду в чат — ZCODE выполняет её на компьютере. Мини-апп при этом показывает сессии, задачи и управляет настройками бота.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Шаги (один раз, на ПК)</h3>
+      <div class="setup-step"><b>1.</b> Откройте ZCode на компьютере → панель <b>Bots</b> → <b>New bot</b>.</div>
+      <div class="setup-step"><b>2.</b> Получите токен: в Telegram у <b>@BotFather</b> → <code>/mybots</code> → выберите бота → <b>API Token</b>.</div>
+      <div class="setup-step"><b>3.</b> Вставьте токен в ZCode и включите переключатель — появится «Telegram long polling is running».</div>
+      <div class="setup-step"><b>4.</b> Вернитесь сюда и нажмите «Проверить снова» — галочка «Бот в ZCode» станет зелёной.</div>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Затем</h3>
+      <p class="hint-row" style="margin:0">Командуйте боту в Telegram (например: «сделай …»), а состояние смотрите во вкладках Обзор и Сессии. Настройки бота — во вкладке Боты.</p>
+    </div>
+    <div class="btn-row">
+      <button id="btnSetupRecheck" class="btn btn-accent" type="button">Проверить снова</button>
+    </div>
+    ${bot ? `<p class="hint-row" style="margin-top:8px">Демо: покажется тестовый бот ${esc("@" + bot.username)}.</p>` : ""}`;
+
+  $("btnSetupRecheck").addEventListener("click", async () => {
+    const btn = $("btnSetupRecheck");
+    btn.disabled = true;
+    btn.textContent = "Проверяю…";
+    await loadSetup();
+    btn.disabled = false;
+    btn.textContent = "Проверить снова";
+    const done = state.client && $("ovSetup").textContent.includes("Всё подключено");
+    haptic.notify(done ? "success" : "warning");
+    if (done) closeDetail();
+  });
 }
 
 /* ============================ Боты ============================ */
@@ -747,6 +872,8 @@ function bindNav() {
   document.querySelectorAll("[data-goto]").forEach((a) =>
     a.addEventListener("click", (e) => { e.preventDefault(); switchTab(a.dataset.goto); }));
   document.addEventListener("click", (e) => {
+    const setupBtn = e.target.closest("[data-setup-action]");
+    if (setupBtn) { setupAction(setupBtn.dataset.setupAction); return; }
     const toggle = e.target.closest("[data-bot-toggle]");
     if (toggle) { e.stopPropagation(); toggleBot(toggle.dataset.botToggle, toggle); return; }
     const botBtn = e.target.closest("[data-bot]");

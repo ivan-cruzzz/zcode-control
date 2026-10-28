@@ -155,6 +155,22 @@ export class DemoAdapter {
     return { projects: DIRS.map((d, i) => ({ id: `proj_demo_${i}`, directory: d })) };
   }
 
+  async setupStatus() {
+    return {
+      bridge: { ok: true, mode: "demo", dbOk: true },
+      ownerPaired: true,
+      bot: {
+        verified: true,
+        id: "7000000001",
+        username: "demo_helper_bot",
+        displayName: "Demo Helper",
+        linkedInZcode: false,
+        enabledInZcode: false,
+        polling: false,
+      },
+    };
+  }
+
   async overview() {
     const s = this.sessions[0];
     return {

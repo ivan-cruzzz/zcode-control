@@ -125,6 +125,21 @@ const adapter = CONFIG.demo
   ? new (await import("./adapter-demo.mjs")).DemoAdapter()
   : new (await import("./adapter-zcode.mjs")).ZcodeAdapter();
 
+/* Наш бот по токену: нужен экрану «Подключение» (проверка привязки в ZCode) */
+let botMeCache = null;
+async function getMeCached() {
+  if (botMeCache) return botMeCache;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${CONFIG.botToken}/getMe`, { signal: AbortSignal.timeout(8_000) });
+    const j = await res.json();
+    if (j.ok) {
+      botMeCache = { id: String(j.result.id), username: j.result.username, displayName: j.result.first_name };
+      adapter.botManager?.setTokenBot?.(botMeCache);
+    }
+  } catch { /* повторим при следующем запросе setup */ }
+  return botMeCache;
+}
+
 function log(msg) {
   console.log(`[${new Date().toISOString().slice(11, 19)}] ${msg}`);
 }
@@ -295,6 +310,12 @@ async function handle(req, res) {
       sendJson(res, 200, { ok: true, ...(await adapter.botLink({ token: String(body.token || "") })) });
     } else if (route === "/api/projects") {
       sendJson(res, 200, { ok: true, ...(await adapter.projects()) });
+    } else if (route === "/api/setup") {
+      const me = await getMeCached();
+      const dbOk = CONFIG.demo ? true : (adapter.dbOk ?? false);
+      const status = await adapter.setupStatus({ dbOk, mode: adapter.mode });
+      status.ownerPaired = !!loadOwner();
+      sendJson(res, 200, { ok: true, ...status });
     } else {
       sendJson(res, 404, { ok: false, error: "Not found" });
     }
