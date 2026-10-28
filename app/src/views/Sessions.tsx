@@ -134,16 +134,20 @@ function SessionSheet({ id, client, botUsername, onClose }: { id: string; client
     if (!text || sending) return;
     setSending(true);
     setErr(null);
+    setHint(null);
     try {
-      // Единственный реальный канал в ZCODE — ваше сообщение в чате бота.
-      // Копируем текст и открываем чат бота: вставить → отправить.
-      try { await navigator.clipboard.writeText(text); } catch { /* ручная вставка */ }
+      // Полная автоматизация: мост отправляет текст в чат бота от вашего имени
+      // (MTProto) — ZCode получает его как обычное сообщение. Ответ прилетит в диалог.
+      const res = await client.sessionSend(id, text);
+      if ((res as any).needUserLogin) {
+        setErr("Разовая настройка: на ПК в папке server выполните «npm run user» и войдите в Telegram. После этого сообщения будут уходить отсюда автоматически.");
+        haptic.notify("error");
+        return;
+      }
       setOutgoing((o) => [...o, { id: `out${Date.now()}`, role: "user", time: Date.now(), text, queued: false }]);
       setDraft("");
       haptic.notify();
-      setErr(null);
-      setHint(`Текст скопирован — вставьте в чате @${botUsername} и отправьте. Ответ появится здесь автоматически.`);
-      tg?.openTelegramLink?.(`https://t.me/${botUsername}`);
+      setHint("Отправлено ZCODE — ответ появится в диалоге автоматически.");
     } catch (e: any) {
       setErr(e.message);
       haptic.notify("error");

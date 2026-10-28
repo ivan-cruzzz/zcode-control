@@ -9,9 +9,12 @@
   },
   "scripts": {
     "start": "node bridge.mjs",
-    "demo": "node bridge.mjs --demo"
+    "demo": "node bridge.mjs --demo",
+    "user": "node login-user.mjs"
   },
   "dependencies": {
+    "input": "^1.0.1",
+    "telegram": "^2.26.22",
     "ws": "^8.18.0"
   }
 }

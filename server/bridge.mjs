@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { Tunnel, BotLink } from "./tunnel.mjs";
 import { ZcodeBot, FREE_TUNNEL_MIN } from "./tg-bot.mjs";
+import { UserTelegram } from "./user-telegram.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -320,6 +321,24 @@ async function handle(req, res) {
     } else if (route === "/api/session") {
       if (!body.id) throw new Error("Не указан id сессии");
       sendJson(res, 200, { ok: true, ...(await adapter.sessionDetail({ id: String(body.id) })) });
+    } else if (route === "/api/session/send") {
+      // Полная автоматизация: текст из мини-аппа уходит в чат бота ОТ ИМЕНИ
+      // владельца (MTProto) — ZCode получает его как обычное сообщение в чате.
+      const text = String(body.text || "").trim();
+      if (!text) throw new Error("Пустой текст");
+      const me = await getMeCached();
+      const username = me?.username || process.env.BOT_USERNAME;
+      if (!username) throw new Error("Не удалось определить username бота");
+      try {
+        const r = await userTG.sendToBot(username, text.slice(0, 4000));
+        sendJson(res, 200, { ok: true, ...r });
+      } catch (err) {
+        if (err.message === "needUserLogin") {
+          sendJson(res, 200, { ok: false, needUserLogin: true, error: "Разовая настройка: на ПК выполните npm run user" });
+        } else {
+          throw err;
+        }
+      }
     } else if (route === "/api/search") {
       const q = String(body.q || "").slice(0, 100);
       if (q.trim().length < 2) throw new Error("Запрос слишком короткий");
@@ -460,6 +479,7 @@ export let tunnelUrl = null;
 let botLink = null;
 let tunnel = null;
 let zbotRef = null;
+let userTG = new UserTelegram({ dir: __dirname, log });
 
 async function startExposure() {
   if (process.argv.includes("--no-expose") || process.env.EXPOSE === "0") {
@@ -532,6 +552,7 @@ startExposure();
 
 function shutdown() {
   log("остановка…");
+  try { userTG?.stop(); } catch { /* noop */ }
   try { tunnel?.stop(); } catch { /* noop */ }
   try { botLink?.stop(); } catch { /* noop */ }
   try { adapter.stop(); } catch { /* noop */ }

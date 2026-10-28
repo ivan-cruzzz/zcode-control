@@ -6,6 +6,7 @@ server/.owner.json
 server/.tg-chat.json
 server/.tg-offset
 server/.billing.json
+server/.user-session
 server/bin/
 
 # зависимости и сборка
