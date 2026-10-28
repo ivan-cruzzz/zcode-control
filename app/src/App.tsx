@@ -55,20 +55,24 @@ export default function App() {
     applyTheme(s.theme);
     setHapticsEnabled(s.haptics);
 
-    // глубокая ссылка из Telegram: t.me/<bot>?startapp=<base64url(адрес моста)> —
-    // мост присылает такую кнопку при каждом подъёме туннеля, адрес всегда свежий
+    // Адрес моста приходит двумя путями: start_param (кнопка в чате)
+    // и ?bridge= (кнопка меню бота — мост обновляет её сам при каждом подъёме)
     let tunnelNote: string | null = null;
-    try {
-      const sp = (tg as any)?.initDataUnsafe?.start_param;
-      if (sp) {
-        const decoded = atob(sp.replace(/-/g, "+").replace(/_/g, "/"));
+    const trySetBridge = (raw: string | null | undefined) => {
+      if (!raw) return;
+      try {
+        const decoded = atob(raw.replace(/-/g, "+").replace(/_/g, "/"));
         if (/^https:\/\//i.test(decoded) && decoded !== s.apiUrl) {
           s.apiUrl = decoded;
           patchSettings({ apiUrl: decoded });
           tunnelNote = decoded;
         }
-      }
-    } catch { /* битый start_param — игнорируем */ }
+      } catch { /* битый параметр — игнорируем */ }
+    };
+    trySetBridge((tg as any)?.initDataUnsafe?.start_param);
+    if (!tunnelNote) {
+      trySetBridge(new URLSearchParams(window.location.search).get("bridge"));
+    }
     if (tunnelNote) {
       setConsoleMsgs([{
         id: "boot",

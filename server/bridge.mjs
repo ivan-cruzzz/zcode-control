@@ -475,6 +475,7 @@ async function startExposure() {
     log(`туннель: ${url}`);
     log("если бот в Telegram ещё не связан — отправьте ему /start, придёт кнопка открытия");
     await botLink.announce(url);
+    await zbotRef.updateMenuButton(url).catch(() => {});
 
     // бесплатный лимит: туннель закрывается через FREE_TUNNEL_MIN минут, Pro снимает лимит
     const armLimit = () => {

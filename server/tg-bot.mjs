@@ -60,6 +60,16 @@ export class ZcodeBot {
     return [{ text: "Открыть ZCODE Control", web_app: { url: APP_URL } }];
   }
 
+  /** Кнопка меню бота всегда открывает приложение с адресом туннеля внутри. */
+  async updateMenuButton(tunnelUrl) {
+    const b64 = Buffer.from(tunnelUrl, "utf8").toString("base64url");
+    const j = await this.api("setChatMenuButton", {
+      menu_button: { type: "web_app", text: "ZCODE Control", web_app: { url: `${APP_URL}?bridge=${b64}` } },
+    }, 10_000);
+    if (j.ok) this.log("кнопка меню бота обновлена (адрес туннеля внутри)");
+    else this.log(`setChatMenuButton: ${j.description}`);
+  }
+
   async sendMenu(chatId) {
     await this.api("sendMessage", {
       chat_id: chatId,
