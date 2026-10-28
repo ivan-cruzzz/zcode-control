@@ -301,6 +301,11 @@ async function handle(req, res) {
     } else if (route === "/api/session") {
       if (!body.id) throw new Error("Не указан id сессии");
       sendJson(res, 200, { ok: true, ...(await adapter.sessionDetail({ id: String(body.id) })) });
+    } else if (route === "/api/session/send") {
+      if (!body.id) throw new Error("Не указан id сессии");
+      const text = String(body.text || "").trim();
+      if (!text) throw new Error("Пустой текст");
+      sendJson(res, 200, { ok: true, ...(await adapter.sessionSend({ id: String(body.id), text: text.slice(0, 4000) })) });
     } else if (route === "/api/search") {
       const q = String(body.q || "").slice(0, 100);
       if (q.trim().length < 2) throw new Error("Запрос слишком короткий");

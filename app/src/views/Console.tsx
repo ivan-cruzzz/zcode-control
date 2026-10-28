@@ -2,9 +2,10 @@
    лента сообщений с пузырями по miniDESIGN §3.3. */
 
 import { useEffect, useRef } from "react";
-import { SquareTerminal } from "lucide-react";
+import { MessageSquare } from "lucide-react";
 import AI_Prompt, { type PromptCommand } from "@/components/kokonutui/ai-prompt";
-import { COMMAND_DEFS, runCommand, type ConsoleMsg, type CommandCtx } from "@/lib/commands";
+import { COMMAND_DEFS, type ConsoleMsg } from "@/lib/commands";
+import { answer, type ChatCtx } from "@/lib/assistant";
 import { fmtClock } from "@/lib/format";
 
 const SLASH: PromptCommand[] = COMMAND_DEFS.map((c, i) => ({
@@ -28,7 +29,7 @@ export function Console({
 }: {
   messages: ConsoleMsg[];
   setMessages: React.Dispatch<React.SetStateAction<ConsoleMsg[]>>;
-  ctx: CommandCtx;
+  ctx: ChatCtx;
 }) {
   const feedRef = useRef<HTMLDivElement>(null);
 
@@ -41,17 +42,17 @@ export function Console({
     if (!text) return;
     const userMsg: ConsoleMsg = { id: `u${Date.now()}`, role: "user", text, time: Date.now(), meta: model };
     setMessages((m) => [...m.slice(-80), userMsg]);
-    const reply = await runCommand(text, ctx);
+    const reply = await answer(text, ctx);
     if (reply) {
       setMessages((m) => [...m.slice(-80), { id: `a${Date.now()}`, role: "assistant", text: reply, time: Date.now() }]);
     }
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-[calc(100dvh-150px)] flex-col">
       <header className="flex items-center gap-2.5 px-4 pb-2 pt-1">
-        <SquareTerminal size={20} strokeWidth={2} aria-hidden />
-        <h1 className="text-[20px] font-semibold tracking-[-0.02em]">Консоль</h1>
+        <MessageSquare size={20} strokeWidth={2} aria-hidden />
+        <h1 className="text-[20px] font-semibold tracking-[-0.02em]">Чат</h1>
       </header>
 
       <div ref={feedRef} className="flex-1 space-y-2 overflow-y-auto px-4 pb-3" aria-live="polite">
@@ -82,7 +83,7 @@ export function Console({
 
       <div className="px-3 pb-24 pt-1 safe-bottom">
         <AI_Prompt
-          placeholder="Команда пульта… «/» — список"
+          placeholder="Спросите о ZCODE или «/» — команды"
           headerText=""
           models={ZAI_MODELS}
           defaultModel="GLM-5.3"

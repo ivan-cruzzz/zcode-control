@@ -164,8 +164,9 @@ export default function App() {
       goto: navigate,
       setTheme: (m: any) => patchSettings({ theme: m }),
       clear: () => setConsoleMsgs([]),
+      openSession,
     }),
-    [client, status, navigate, patchSettings],
+    [client, status, navigate, patchSettings, openSession],
   );
 
   return (

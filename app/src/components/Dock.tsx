@@ -1,6 +1,6 @@
 /* Плавающий док — miniDESIGN §3.2 / [S6]: стекло, 48×48 пункты, актив — синий + точка. */
 
-import { Activity, TerminalSquare, List, Bot, Settings } from "lucide-react";
+import { Activity, MessageSquare, List, Bot, Settings } from "lucide-react";
 import { haptic } from "@/lib/tg";
 import { cn } from "@/lib/utils";
 
@@ -9,7 +9,7 @@ export type ViewId = "overview" | "sessions" | "console" | "bots" | "settings";
 const ITEMS: { id: ViewId; label: string; icon: typeof Activity }[] = [
   { id: "overview", label: "Обзор", icon: Activity },
   { id: "sessions", label: "Сессии", icon: List },
-  { id: "console", label: "Консоль", icon: TerminalSquare },
+  { id: "console", label: "Чат", icon: MessageSquare },
   { id: "bots", label: "Боты", icon: Bot },
   { id: "settings", label: "Ещё", icon: Settings },
 ];

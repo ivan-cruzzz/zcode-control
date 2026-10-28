@@ -1,6 +1,6 @@
 /* Сессии: список, фильтр + полнотекстовый поиск, карточка сессии (шторка). */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronRight, X } from "lucide-react";
 import type { AppClient, SessionItem } from "@/lib/api";
 import { fmtTokens, fmtRel, fmtDir } from "@/lib/format";
@@ -104,10 +104,18 @@ export function Sessions({ client, refreshTick, focusSession }: { client: AppCli
 
 function SessionSheet({ id, client, onClose }: { id: string; client: AppClient; onClose: () => void }) {
   const [data, setData] = useState<any>(null);
+  const [outgoing, setOutgoing] = useState<any[]>([]);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const feedRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     client.sessionDetail(id).then(setData).catch(() => {});
   }, [id, client]);
+
+  useEffect(() => {
+    feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight });
+  }, [data, outgoing]);
 
   useEffect(() => {
     tg?.BackButton?.show?.();
@@ -119,10 +127,27 @@ function SessionSheet({ id, client, onClose }: { id: string; client: AppClient; 
     };
   }, [onClose]);
 
+  async function send() {
+    const text = draft.trim();
+    if (!text || sending) return;
+    setSending(true);
+    try {
+      await client.sessionSend(id, text);
+      setOutgoing((o) => [...o, { id: `out${Date.now()}`, role: "user", time: Date.now(), text, queued: true }]);
+      setDraft("");
+      haptic.notify();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
   const s = data?.session;
+  const messages = [...(data?.messages || []), ...outgoing];
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-background" role="dialog" aria-label="Детали сессии">
+    <div className="fixed inset-0 z-[60] flex flex-col bg-background" role="dialog" aria-label="Чат сессии">
       <header className="flex items-center gap-3 border-b border-border px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))]">
         <button onClick={onClose} aria-label="Назад" className="grid h-10 w-10 place-items-center rounded-[12px] border border-border transition-transform active:scale-90">
           <X size={18} />
@@ -130,7 +155,7 @@ function SessionSheet({ id, client, onClose }: { id: string; client: AppClient; 
         <div className="min-w-0 flex-1 truncate text-[14px] font-semibold">{s?.title || "…"}</div>
       </header>
 
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">
+      <div ref={feedRef} className="flex-1 space-y-4 overflow-y-auto p-4">
         {!data && <p className="text-center text-[13px] text-muted-foreground">Загрузка…</p>}
         {s && (
           <>
@@ -157,10 +182,12 @@ function SessionSheet({ id, client, onClose }: { id: string; client: AppClient; 
 
             <h3 className="font-mono text-[12px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">Диалог</h3>
             <div>
-              {(data.messages || []).map((m: any) => (
+              {messages.map((m: any) => (
                 <div key={m.id} className={cn("mb-2 max-w-[88%] rounded-[14px] px-3 py-2 text-[13.5px] whitespace-pre-wrap", m.role === "user" ? "ml-auto rounded-br-[5px] bg-foreground text-background" : "mr-auto rounded-bl-[5px] border border-border bg-card")}>
                   {(m.text || "").slice(0, 1200)}
-                  <div className={cn("mt-1 font-mono text-[10px]", m.role === "user" ? "text-background/60" : "text-muted-foreground")}>{fmtRel(m.time)}</div>
+                  <div className={cn("mt-1 font-mono text-[10px]", m.role === "user" ? "text-background/60" : "text-muted-foreground")}>
+                    {m.queued ? "в очереди ввода · " : ""}{fmtRel(m.time)}
+                  </div>
                 </div>
               ))}
             </div>
@@ -180,6 +207,31 @@ function SessionSheet({ id, client, onClose }: { id: string; client: AppClient; 
             )}
           </>
         )}
+      </div>
+
+      {/* ввод внизу, как в мессенджере */}
+      <div className="border-t border-border px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-2">
+        <div className="flex items-end gap-2">
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") send(); }}
+            placeholder="Сообщение в сессию…"
+            aria-label="Сообщение в сессию"
+            className="h-11 min-w-0 flex-1 rounded-[9999px] border border-border bg-card px-4 text-[15px] outline-none placeholder:text-muted-foreground focus:border-foreground/40"
+          />
+          <button
+            onClick={send}
+            disabled={sending || !draft.trim()}
+            aria-label="Отправить"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-foreground text-background transition-transform active:scale-90 disabled:opacity-40"
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+          </button>
+        </div>
+        <p className="mt-1.5 text-center text-[10.5px] leading-snug text-muted-foreground">
+          Экспериментально: текст ставится в очередь ввода сессии. Надёжный канал — чат бота.
+        </p>
       </div>
     </div>
   );

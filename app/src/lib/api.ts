@@ -179,6 +179,7 @@ export class BridgeClient {
   overview() { return postJson(`${this.baseUrl}/api/overview`, { initData: this.initData }); }
   sessions(limit = 40) { return postJson(`${this.baseUrl}/api/sessions`, { initData: this.initData, limit }); }
   sessionDetail(id: string) { return postJson(`${this.baseUrl}/api/session`, { initData: this.initData, id }); }
+  sessionSend(id: string, text: string) { return postJson(`${this.baseUrl}/api/session/send`, { initData: this.initData, id, text }); }
   search(q: string, limit = 12) { return postJson(`${this.baseUrl}/api/search`, { initData: this.initData, q, limit }); }
   stats(days = 7) { return postJson(`${this.baseUrl}/api/stats`, { initData: this.initData, days }); }
   bots() { return postJson(`${this.baseUrl}/api/bots`, { initData: this.initData }); }
@@ -293,6 +294,14 @@ export class DemoClient {
     const s = this.sessions.find((x) => x.id === id);
     if (!s) throw new Error("Сессия не найдена");
     return { session: s, todos: s.todos, messages: s.messages, tools: s.tools };
+  }
+  async sessionSend(id: string, text: string) {
+    await sleep(300);
+    const s = this.sessions.find((x) => x.id === id);
+    if (!s) throw new Error("Сессия не найдена");
+    s.messages.push({ id: `m${Date.now()}`, role: "user", time: Date.now(), text, more: false });
+    this.emit("session", id);
+    return { queued: true, note: "демо: сообщение добавлено в диалог" };
   }
   async search(q: string) {
     await sleep(250);
