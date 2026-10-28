@@ -24,16 +24,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      # Собираем только мини-апп (app/) — server/ и секреты в деплой не попадают
+      - name: Build mini app
+        working-directory: app
+        run: |
+          npm ci --registry=https://registry.npmjs.org --no-fund --no-audit
+          npx vite build
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      # В артефакт попадает только статика мини-аппа из app/.
-      # server/ и локальные конфиги в деплой не идут — секретов там и так нет,
-      # но публиковать лишнее незачем.
       - name: Upload static files
         uses: actions/upload-pages-artifact@v3
         with:
-          path: app
+          path: app/dist
 
       - name: Deploy to GitHub Pages
         id: deployment
