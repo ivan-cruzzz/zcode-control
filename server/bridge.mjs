@@ -92,21 +92,26 @@ function validateInitData(initData) {
   const hash = params.get("hash");
   if (!hash) return { ok: false, reason: "no_hash" };
   params.delete("hash");
-  params.delete("signature");
 
-  const dataCheckString = [...params.entries()]
-    .map(([k, v]) => `${k}=${v}`)
-    .sort()
-    .join("\n");
+  // Telegram в разных поколениях клиентов считает подпись по строке
+  // с полем signature и без него — принимаем любой из двух вариантов.
+  const buildCheckString = (excludeSignature) => {
+    const p = new URLSearchParams(params.toString());
+    if (excludeSignature) p.delete("signature");
+    return [...p.entries()].map(([k, v]) => `${k}=${v}`).sort().join("\n");
+  };
 
   const secret = crypto.createHmac("sha256", "WebAppData").update(CONFIG.botToken).digest();
-  const computed = crypto.createHmac("sha256", secret).update(dataCheckString).digest("hex");
-
-  const a = Buffer.from(computed, "hex");
-  const b = Buffer.from(hash, "hex");
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+  const expected = (dcs) => crypto.createHmac("sha256", secret).update(dcs).digest("hex");
+  const a = Buffer.from(hash, "hex");
+  const valid = [true, false].some((exclSig) => {
+    const b = Buffer.from(expected(buildCheckString(exclSig)), "hex");
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  });
+  if (!valid) {
     return { ok: false, reason: "bad_signature" };
   }
+  params.delete("signature");
 
   const authDate = Number(params.get("auth_date"));
   const ageSec = Math.floor(Date.now() / 1000) - authDate;

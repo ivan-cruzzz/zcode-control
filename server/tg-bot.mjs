@@ -9,7 +9,7 @@ import path from "node:path";
 const APP_URL = "https://ivan-cruzzz.github.io/zcode-control/";
 const STARS_PER_MONTH = 100;
 const PRO_DAYS = 30;
-const FREE_TUNNEL_MIN = 60;
+const FREE_TUNNEL_MIN = 480;
 
 export class ZcodeBot {
   constructor({ token, dir, log = () => {}, getContext }) {
