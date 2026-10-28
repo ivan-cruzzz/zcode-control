@@ -168,4 +168,19 @@ export class BridgeClient {
   async stats(days = 7) {
     return postJson(`${this.baseUrl}/api/stats`, { initData: this.initData, days });
   }
+  async bots() {
+    return postJson(`${this.baseUrl}/api/bots`, { initData: this.initData });
+  }
+  async botUpdate(id, patch) {
+    return postJson(`${this.baseUrl}/api/bot/update`, { initData: this.initData, id, patch });
+  }
+  async botDelete(id) {
+    return postJson(`${this.baseUrl}/api/bot/delete`, { initData: this.initData, id });
+  }
+  async botLink(token) {
+    return postJson(`${this.baseUrl}/api/bot/link`, { initData: this.initData, token });
+  }
+  async projects() {
+    return postJson(`${this.baseUrl}/api/projects`, { initData: this.initData });
+  }
 }

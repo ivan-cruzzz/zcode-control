@@ -2,7 +2,7 @@
    (приложение должно корректно открываться и в обычном браузере). */
 
 export const tg = window.Telegram?.WebApp ?? null;
-export const APP_VERSION = "1.0.0";
+export const APP_VERSION = "1.1.0";
 
 let hapticsEnabled = true;
 

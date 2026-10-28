@@ -21,9 +21,25 @@ const state = {
   overviewLoaded: false,
   sessionsLoaded: false,
   statsLoaded: false,
+  botsLoaded: false,
   detailId: null,
+  detailKind: null, // 'session' | 'bot' | 'newbot'
   detailOpen: false,
   searchSeq: 0,
+  bots: [],
+  projects: [],
+};
+
+const REPLY_MODES = [
+  { id: "assistant_changes", title: "Стандартный", desc: "Текст ассистента и изменения файлов, без прогресса инструментов." },
+  { id: "assistant_toolcalls_changes", title: "Подробный", desc: "То же плюс вызовы инструментов." },
+  { id: "summary_changes", title: "Кратко", desc: "Только сводка изменений." },
+  { id: "streaming_card", title: "Живая карточка", desc: "Ответ обновляется в реальном времени." },
+];
+
+const BOT_COMMAND_LABELS = {
+  status: "/status", new: "/new", workspace: "Проект", model: "Модель",
+  mode: "Режим", thoughtLevel: "Глубина", reply: "Ответ",
 };
 
 let settings = { apiUrl: "", theme: "auto", haptics: true };
@@ -104,6 +120,7 @@ function createClient() {
       if (ev.scope === "all") refreshAll();
       else if (ev.scope === "overview") loadOverview();
       else if (ev.scope === "sessions") loadSessions();
+      else if (ev.scope === "bots") loadBots();
       else if (ev.scope === "session" && ev.id && state.detailOpen && state.detailId === ev.id) loadDetail(ev.id);
     },
   };
@@ -141,7 +158,8 @@ function refreshAll() {
   loadOverview();
   loadSessions();
   if (state.statsLoaded) loadStats();
-  if (state.detailOpen && state.detailId) loadDetail(state.detailId);
+  if (state.botsLoaded) loadBots();
+  if (state.detailOpen && state.detailKind === "session" && state.detailId) loadDetail(state.detailId);
 }
 
 /* ============================ Обзор ============================ */
@@ -256,6 +274,7 @@ async function openSession(id) {
   if (!id) return;
   haptic.impact("light");
   state.detailId = id;
+  state.detailKind = "session";
   state.detailOpen = true;
   const detail = $("detail");
   detail.hidden = false;
@@ -334,6 +353,7 @@ function closeDetail() {
   if (!state.detailOpen) return;
   state.detailOpen = false;
   state.detailId = null;
+  state.detailKind = null;
   const detail = $("detail");
   detail.classList.remove("open");
   setTimeout(() => { if (!state.detailOpen) detail.hidden = true; }, 300);
@@ -341,7 +361,7 @@ function closeDetail() {
   haptic.tap();
 }
 
-/* ============================ Поиск ============================ */
+/* ============================ Поиск (внутри сессий) ============================ */
 
 function highlight(text, q) {
   const t = esc(text);
@@ -352,16 +372,17 @@ function highlight(text, q) {
   return t.slice(0, idx) + "<mark>" + t.slice(idx, idx + qq.length) + "</mark>" + t.slice(idx + qq.length);
 }
 
-async function runSearch(q) {
+async function runGlobalSearch(q) {
   const seq = ++state.searchSeq;
-  $("searchResults").innerHTML = skelRows(3);
-  $("searchHint").textContent = `Ищем «${q}»…`;
+  $("globalTitle").hidden = false;
+  $("globalTitle").textContent = `Сообщения · ищем «${q}»…`;
+  $("globalList").innerHTML = skelRows(2);
   try {
-    const data = await state.client.search(q, 20);
+    const data = await state.client.search(q, 12);
     if (seq !== state.searchSeq) return;
     const results = data.results || [];
-    $("searchHint").textContent = results.length ? `Найдено: ${results.length}` : `Ищет по текстам всех сессий ZCODE.`;
-    $("searchResults").innerHTML = results.length
+    $("globalTitle").textContent = results.length ? `Сообщения · найдено: ${results.length}` : "Сообщения";
+    $("globalList").innerHTML = results.length
       ? results.map((r, i) => `
         <button class="search-item" type="button" data-session="${esc(r.sessionId)}" style="--i:${Math.min(i, 12)}">
           <div class="search-head">
@@ -370,12 +391,275 @@ async function runSearch(q) {
           </div>
           <div class="search-snippet">…${highlight(r.text, q)}…</div>
         </button>`).join("")
-      : `<div class="empty">Ничего не найдено.</div>`;
-    haptic.notify(results.length ? "success" : "warning");
+      : `<div class="empty">В сообщениях ничего не найдено.</div>`;
   } catch (e) {
     if (seq !== state.searchSeq) return;
-    $("searchResults").innerHTML = `<div class="empty">Ошибка: ${esc(e.message)}</div>`;
+    $("globalList").innerHTML = `<div class="empty">Ошибка поиска: ${esc(e.message)}</div>`;
   }
+}
+
+function clearGlobalSearch() {
+  state.searchSeq += 1;
+  $("globalTitle").hidden = true;
+  $("globalList").innerHTML = "";
+}
+
+/* ============================ Боты ============================ */
+
+async function loadBots() {
+  try {
+    const data = await state.client.bots();
+    state.bots = data.bots || [];
+    state.botsLoaded = true;
+    renderBots(data.polling);
+  } catch { /* тихо */ }
+}
+
+async function ensureProjects() {
+  if (state.projects.length) return state.projects;
+  try {
+    const data = await state.client.projects();
+    state.projects = data.projects || [];
+  } catch { state.projects = []; }
+  return state.projects;
+}
+
+function renderBots(polling) {
+  if (polling !== undefined) state.lastPolling = polling;
+  const poll = state.lastPolling ?? false;
+  $("botsStatus").textContent = state.bots.length
+    ? `Поллинг Telegram: ${poll ? "активен" : "остановлен"} · ботов: ${state.bots.length}`
+    : "";
+  if (!state.bots.length) {
+    $("botsList").innerHTML = `<div class="empty">Ботов нет. Создайте бота у @BotFather и нажмите «Новый бот».</div>`;
+    return;
+  }
+  $("botsList").innerHTML = state.bots.map((b, i) => `
+    <div class="bot-item" style="--i:${Math.min(i, 12)}">
+      <button class="bot-link" type="button" data-bot="${esc(b.id)}">
+        <span class="bot-avatar" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4 3 11l6 2 2 6 4-5 5 1z"/></svg>
+        </span>
+        <span class="bot-main">
+          <span class="bot-name">${esc(b.displayName)}
+            ${b.running ? '<span class="chip accent">работает</span>' : b.enabled ? '<span class="chip warn">ожидает</span>' : '<span class="chip">выключен</span>'}
+          </span>
+          <span class="bot-sub">${esc(b.provider)}${b.workspacePath ? " · " + esc(fmtDir(b.workspacePath)) : ""}</span>
+        </span>
+      </button>
+      <button class="mini-switch ${b.enabled ? "on" : ""}" type="button" role="switch" aria-checked="${b.enabled}"
+              aria-label="Включён ли бот" data-bot-toggle="${esc(b.id)}"></button>
+    </div>`).join("");
+}
+
+async function toggleBot(id, el) {
+  const bot = state.bots.find((b) => b.id === id);
+  if (!bot) return;
+  const next = !bot.enabled;
+  haptic.impact("light");
+  el.classList.toggle("on", next);
+  try {
+    await state.client.botUpdate(id, { enabled: next });
+    bot.enabled = next;
+    bot.running = next && bot.running;
+    showToast(next ? "Бот включён" : "Бот выключен", "ok");
+    renderBots();
+    if (state.detailOpen && state.detailKind === "bot" && state.detailId === id) renderBotDetail(bot);
+  } catch (e) {
+    el.classList.toggle("on", !next);
+    showToast("Ошибка: " + e.message, "err");
+  }
+}
+
+async function openBot(id) {
+  const bot = state.bots.find((b) => b.id === id);
+  if (!bot) return;
+  haptic.impact("light");
+  state.detailId = id;
+  state.detailKind = "bot";
+  state.detailOpen = true;
+  const detail = $("detail");
+  detail.hidden = false;
+  requestAnimationFrame(() => detail.classList.add("open"));
+  tg?.BackButton?.show?.();
+  await ensureProjects();
+  if (state.detailKind === "bot") renderBotDetail(bot);
+}
+
+function renderBotDetail(bot) {
+  $("detailTitle").textContent = bot.displayName;
+  const wsAll = (bot.allowedWorkspaces || []).includes("*");
+
+  const cmdChips = Object.entries(BOT_COMMAND_LABELS).map(([key, label]) => {
+    const on = bot.allowedCommands?.[key] !== false;
+    return `<button class="chip toggle ${on ? "on" : ""}" type="button" data-cmd="${key}" role="switch" aria-checked="${on}">${esc(label)}</button>`;
+  }).join("");
+
+  const projectChips = state.projects.map((p) => {
+    const on = !wsAll && bot.allowedWorkspaces.includes(p.id);
+    return `<button class="chip toggle ${on ? "on" : ""}" type="button" data-proj="${esc(p.id)}" role="switch" aria-checked="${on}">${esc(fmtDir(p.directory))}</button>`;
+  }).join("");
+
+  $("detailBody").innerHTML = `
+    <p class="hint-row" style="margin:0 0 14px">
+      <span class="chip ${bot.running ? "accent" : bot.enabled ? "warn" : ""}">${bot.running ? "поллинг активен" : bot.enabled ? "ожидает запуска" : "выключен"}</span>
+      <span class="chip">${esc(bot.provider)}</span>
+      ${bot.workspacePath ? `<span class="chip info">${esc(fmtDir(bot.workspacePath))}</span>` : ""}
+    </p>
+
+    <h3 class="section-title">Гранулярность ответов</h3>
+    <div class="card">
+      ${REPLY_MODES.map((m) => `
+        <button class="radio-row ${bot.replyMode === m.id ? "on" : ""}" type="button" data-reply="${m.id}" role="radio" aria-checked="${bot.replyMode === m.id}">
+          <span class="radio-dot" aria-hidden="true"></span>
+          <span><span class="radio-title">${m.title}</span><div class="radio-desc">${m.desc}</div></span>
+        </button>`).join("")}
+    </div>
+
+    <h3 class="section-title">Доступ к проектам</h3>
+    <div class="card">
+      <div class="chips-wrap">
+        <button class="chip toggle ${wsAll ? "on" : ""}" type="button" id="projAll">Все проекты</button>
+        ${projectChips}
+      </div>
+      <p class="hint-row">Выберите конкретные проекты, если доступ нужно ограничить.</p>
+    </div>
+
+    <h3 class="section-title">Команды в чате</h3>
+    <div class="card">
+      <div class="chips-wrap">${cmdChips}</div>
+    </div>
+
+    <h3 class="section-title">Имя</h3>
+    <div class="card">
+      <input id="botNameInput" class="input" type="text" maxlength="64" value="${esc(bot.name || "")}" placeholder="${esc(bot.displayName)}">
+      <div class="btn-row"><button id="btnSaveName" class="btn btn-ghost" type="button">Сохранить имя</button></div>
+    </div>
+
+    <div class="danger-zone">
+      <button id="btnDeleteBot" class="btn btn-danger btn-block" type="button">Удалить бота</button>
+    </div>`;
+
+  bindBotDetail(bot);
+}
+
+function bindBotDetail(bot) {
+  const save = (patch, okText) => state.client.botUpdate(bot.id, patch)
+    .then(() => {
+      Object.assign(bot, patch);
+      if (patch.allowedWorkspaces !== undefined) bot.allowedWorkspaces = patch.allowedWorkspaces === "*" ? ["*"] : patch.allowedWorkspaces;
+      if (patch.allowedCommands !== undefined) bot.allowedCommands = { ...bot.allowedCommands, ...patch.allowedCommands };
+      haptic.notify("success");
+      if (okText) showToast(okText, "ok");
+      renderBots();
+    })
+    .catch((e) => { haptic.notify("error"); showToast("Ошибка: " + e.message, "err"); });
+
+  $("detailBody").querySelectorAll("[data-reply]").forEach((row) =>
+    row.addEventListener("click", () => {
+      haptic.tap();
+      $("detailBody").querySelectorAll("[data-reply]").forEach((r) => {
+        r.classList.toggle("on", r === row);
+        r.setAttribute("aria-checked", r === row ? "true" : "false");
+      });
+      save({ replyMode: row.dataset.reply }, "Режим ответов обновлён");
+    }));
+
+  $("projAll").addEventListener("click", () => {
+    haptic.tap();
+    save({ allowedWorkspaces: ["*"] }, "Доступ: все проекты").then(() => renderBotDetail(bot));
+  });
+  $("detailBody").querySelectorAll("[data-proj]").forEach((chip) =>
+    chip.addEventListener("click", () => {
+      haptic.tap();
+      const id = chip.dataset.proj;
+      let list = (bot.allowedWorkspaces || []).includes("*") ? [] : [...bot.allowedWorkspaces];
+      list = list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+      if (!list.length) { showToast("Нужен хотя бы один проект — вернул «Все проекты»", ""); return; }
+      save({ allowedWorkspaces: list }).then(() => renderBotDetail(bot));
+    }));
+
+  $("detailBody").querySelectorAll("[data-cmd]").forEach((chip) =>
+    chip.addEventListener("click", () => {
+      haptic.tap();
+      const key = chip.dataset.cmd;
+      const next = { ...(bot.allowedCommands || {}) };
+      next[key] = next[key] === false ? true : false;
+      save({ allowedCommands: next }).then(() => renderBotDetail(bot));
+    }));
+
+  $("btnSaveName").addEventListener("click", () => {
+    const name = $("botNameInput").value.trim();
+    save({ name }, name ? "Имя сохранено" : "Имя очищено").then(() => renderBotDetail(bot));
+  });
+
+  const del = $("btnDeleteBot");
+  del.addEventListener("click", async () => {
+    if (!del.classList.contains("arm")) {
+      del.classList.add("arm");
+      del.textContent = "Точно удалить? Нажмите ещё раз";
+      setTimeout(() => {
+        del.classList.remove("arm");
+        del.textContent = "Удалить бота";
+      }, 3_500);
+      return;
+    }
+    try {
+      await state.client.botDelete(bot.id);
+      haptic.notify("warning");
+      showToast("Бот удалён", "ok");
+      state.bots = state.bots.filter((b) => b.id !== bot.id);
+      renderBots();
+      closeDetail();
+    } catch (e) {
+      showToast("Ошибка: " + e.message, "err");
+    }
+  });
+}
+
+function openNewBot() {
+  haptic.impact("light");
+  state.detailKind = "newbot";
+  state.detailOpen = true;
+  state.detailId = null;
+  const detail = $("detail");
+  detail.hidden = false;
+  requestAnimationFrame(() => detail.classList.add("open"));
+  tg?.BackButton?.show?.();
+
+  $("detailTitle").textContent = "Новый бот";
+  $("detailBody").innerHTML = `
+    <div class="card">
+      <h3 class="card-title">Шаг 1 · Проверка токена</h3>
+      <label class="field-label" for="newBotToken">Токен от @BotFather</label>
+      <input id="newBotToken" class="input mono" type="password" autocomplete="off" spellcheck="false" placeholder="123456789:AA…">
+      <div class="btn-row"><button id="btnCheckToken" class="btn btn-accent" type="button">Проверить</button></div>
+      <p class="hint-row">Токен проверяется мостом через Telegram и нигде не сохраняется: ZCode шифрует токены своим ключом.</p>
+    </div>
+    <div id="newBotResult"></div>`;
+
+  $("btnCheckToken").addEventListener("click", async () => {
+    const token = $("newBotToken").value.trim();
+    if (!token) return;
+    const btn = $("btnCheckToken");
+    btn.disabled = true;
+    btn.textContent = "Проверяю…";
+    try {
+      const res = await state.client.botLink(token);
+      $("newBotResult").innerHTML = `
+        <div class="card">
+          <h3 class="card-title">${res.alreadyLinked ? "Бот уже привязан" : "✓ " + esc(res.displayName)}</h3>
+          <p class="hint-row">@${esc(res.username)} · ${esc(res.hint)}</p>
+        </div>`;
+      haptic.notify("success");
+    } catch (e) {
+      $("newBotResult").innerHTML = `<div class="empty">Ошибка: ${esc(e.message)}</div>`;
+      haptic.notify("error");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Проверить";
+    }
+  });
 }
 
 /* ============================ Статистика ============================ */
@@ -431,6 +715,7 @@ function switchTab(name) {
   haptic.tap();
   if (name === "sessions" && !state.sessionsLoaded) loadSessions();
   if (name === "stats" && !state.statsLoaded) loadStats();
+  if (name === "bots" && !state.botsLoaded) loadBots();
   window.scrollTo({ top: 0 });
 }
 
@@ -451,9 +736,14 @@ function bindNav() {
   document.querySelectorAll("[data-goto]").forEach((a) =>
     a.addEventListener("click", (e) => { e.preventDefault(); switchTab(a.dataset.goto); }));
   document.addEventListener("click", (e) => {
+    const toggle = e.target.closest("[data-bot-toggle]");
+    if (toggle) { e.stopPropagation(); toggleBot(toggle.dataset.botToggle, toggle); return; }
+    const botBtn = e.target.closest("[data-bot]");
+    if (botBtn) { openBot(botBtn.dataset.bot); return; }
     const btn = e.target.closest("[data-session]");
     if (btn) openSession(btn.dataset.session);
   });
+  $("btnNewBot").addEventListener("click", openNewBot);
   tg?.BackButton?.onClick?.(() => {
     if (state.detailOpen) closeDetail();
     else switchTab("overview");
@@ -461,19 +751,15 @@ function bindNav() {
 }
 
 function bindSearch() {
-  $("searchForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const q = $("searchInput").value.trim();
-    if (q.length < 2) {
-      $("searchHint").textContent = "Введите хотя бы 2 символа.";
-      return;
-    }
-    runSearch(q);
-  });
-  let deb;
+  let debLocal, debGlobal;
   $("sessFilter").addEventListener("input", () => {
-    clearTimeout(deb);
-    deb = setTimeout(renderSessions, 150);
+    clearTimeout(debLocal);
+    debLocal = setTimeout(renderSessions, 150);
+
+    const q = $("sessFilter").value.trim();
+    clearTimeout(debGlobal);
+    if (q.length >= 3) debGlobal = setTimeout(() => runGlobalSearch(q), 500);
+    else clearGlobalSearch();
   });
 }
 

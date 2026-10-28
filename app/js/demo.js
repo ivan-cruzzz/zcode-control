@@ -77,6 +77,7 @@ export class DemoClient {
   async connect() {
     this.disposed = false;
     this._buildDataset();
+    this._buildBots();
     this._scheduleTick();
     this._setStatus("demo");
     return { ok: true, user: { first_name: "Demo" }, mode: "demo" };
@@ -86,6 +87,72 @@ export class DemoClient {
     this.disposed = true;
     clearTimeout(this.timer);
     this._setStatus("offline");
+  }
+
+  /* ---------- боты (демо) ---------- */
+
+  _buildBots() {
+    this.demoBots = [{
+      id: "demo_bot1",
+      name: "",
+      displayName: "Demo Helper",
+      provider: "telegram",
+      providerUserId: "7000000001",
+      enabled: true,
+      running: true,
+      replyMode: "assistant_changes",
+      allowedWorkspaces: ["*"],
+      allowedCommands: { status: true, new: true, workspace: true, model: true, mode: true, thoughtLevel: true, reply: true },
+      workspacePath: "~/projects/api-gateway",
+      stateUpdatedAt: Date.now() - 300_000,
+      linked: true,
+    }];
+  }
+
+  async bots() {
+    await rndLatency();
+    return { bots: this.demoBots, polling: this.demoBots.some((b) => b.enabled) };
+  }
+
+  async botUpdate(id, patch) {
+    await rndLatency();
+    const b = this.demoBots.find((x) => x.id === id);
+    if (!b) throw new Error("Бот не найден");
+    if (patch.enabled !== undefined) { b.enabled = !!patch.enabled; b.running = b.enabled && b.running; }
+    if (patch.name !== undefined) b.name = String(patch.name).slice(0, 64);
+    if (patch.replyMode !== undefined) b.replyMode = patch.replyMode;
+    if (patch.allowedWorkspaces !== undefined) b.allowedWorkspaces = patch.allowedWorkspaces === "*" ? ["*"] : patch.allowedWorkspaces;
+    if (patch.allowedCommands !== undefined) b.allowedCommands = { ...b.allowedCommands, ...patch.allowedCommands };
+    this._emit("bots");
+    return { updated: id };
+  }
+
+  async botDelete(id) {
+    await rndLatency();
+    const before = this.demoBots.length;
+    this.demoBots = this.demoBots.filter((x) => x.id !== id);
+    if (this.demoBots.length === before) throw new Error("Бот не найден");
+    this._emit("bots");
+    return { deleted: id };
+  }
+
+  async botLink(token) {
+    await rndLatency();
+    const t = String(token || "").trim();
+    if (!/^\d{6,12}:[A-Za-z0-9_-]{30,}$/.test(t)) throw new Error("Токен не похож на формат BotFather");
+    return {
+      verified: true,
+      username: "demo_helper_bot",
+      displayName: "Demo Helper",
+      alreadyLinked: this.demoBots.length > 0,
+      existingId: this.demoBots[0]?.id ?? null,
+      hint: "Демо: токен проверен по формату, без реального вызова Telegram.",
+    };
+  }
+
+  async projects() {
+    await rndLatency();
+    return { projects: DIRS.map((d, i) => ({ id: `proj_demo_${i}`, directory: d })) };
   }
 
   _buildDataset() {

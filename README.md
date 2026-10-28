@@ -21,8 +21,11 @@
 Мини-апп для Telegram, который показывает, чем занят ZCODE на вашем ПК, и позволяет следить за работой с телефона:
 
 - **Обзор** — живой статус (активен / простаивает), текущая сессия, модель и режим, токены за сегодня, лента последней активности;
-- **Сессии** — список последних сессий с метками `live` / `готово` / `прервана`, расходом токенов и временем; внутри — задачи (todo), диалог пользователя с ассистентом и использованные инструменты;
-- **Поиск** — полнотекстовый поиск по всем сообщениям всех сессий;
+- **Сессии** — список последних сессий с метками `live` / `готово` / `прервана`; внутри — задачи (todo), диалог пользователя с ассистентом и использованные инструменты;
+- **Поиск** — в той же вкладке: фильтр по названиям + полнотекстовый поиск по сообщениям всех сессий;
+- **Боты** — управление ботами ZCode с телефона, как в панели Bots на компьютере:
+  вкл/выкл поллинга, гранулярность ответов (стандартный / подробный / кратко / живая карточка),
+  доступ к проектам, разрешённые команды, переименование, удаление, статус поллинга и проверка токена BotFather;
 - **Статистика** — токены по дням за неделю, топ моделей и инструментов;
 - **Демо-режим** — если мост не подключён, приложение показывает сгенерированные данные, так что интерфейс можно посмотреть сразу.
 
@@ -52,6 +55,7 @@
 | `server/.env` | токен бота | Файл в `.gitignore`, существует только на вашем ПК |
 | Мини-апп | ничего | Авторизация — через подписанный Telegram `initData` |
 | Репозиторий | ничего | В CI уезжает только статика из `app/` |
+| `~/.zcode/v2/credentials.json` | токены ботов ZCode | Зашифрованы самим ZCode (`enc:v1`); мост **не умеет** их читать и не логирует — только удаляет ключ при удалении бота |
 
 Как устроена авторизация: Telegram подписывает `initData` ключом, выведенным из токена бота. Мост проверяет HMAC-SHA256 подпись, свежесть (по умолчанию ≤ 24 ч) и — опционально — белый список Telegram ID (`ALLOWED_USER_IDS`). Подделать запрос без токена нельзя, а токен снаружи недоступен.
 
@@ -98,7 +102,14 @@ POST https://api.telegram.org/bot<TOKEN>/setChatMenuButton
 | `POST /api/session` | `{initData, id}` | `{ok, session, todos, messages, tools}` |
 | `POST /api/search` | `{initData, q, limit}` | `{ok, results:[{sessionId, sessionTitle, time, text}]}` |
 | `POST /api/stats` | `{initData, days}` | `{ok, daily:[{date, tokens, sessions}], models, tools}` |
+| `POST /api/bots` | `{initData}` | `{ok, bots:[…], polling}` — список ботов ZCode + статус поллинга |
+| `POST /api/bot/update` | `{initData, id, patch}` | `{ok, updated}` — patch: `enabled, name, replyMode, allowedWorkspaces, allowedCommands` |
+| `POST /api/bot/delete` | `{initData, id}` | `{ok, deleted}` — удаляет бота и ключ его токена из credentials |
+| `POST /api/bot/link` | `{initData, token}` | `{ok, verified, username, alreadyLinked, hint}` — проверка токена через getMe |
+| `POST /api/projects` | `{initData}` | `{ok, projects:[{id, directory}]}` |
 | `WS /ws` | `{type:"auth", initData}` | `{type:"auth_ok"}`, далее `{type:"refresh", scope, id?}` |
+
+`replyMode` принимает значения ZCode: `assistant_changes` (стандартный), `assistant_toolcalls_changes`, `summary_changes`, `streaming_card`.
 
 `time*` — epoch-миллисекунды; `outcome` — `completed | interrupted | null`. Референсная реализация — `server/adapter-zcode.mjs`.
 
@@ -116,6 +127,7 @@ POST https://api.telegram.org/bot<TOKEN>/setChatMenuButton
 ├── server/                 # мост (запускается на вашем ПК)
 │   ├── bridge.mjs          # HTTP/WS, проверка initData, CORS, rate-limit
 │   ├── adapter-zcode.mjs   # чтение базы ZCODE (read-only SQLite)
+│   ├── bot-manager.mjs     # управление ботами ZCode (bot-config.v3.json)
 │   ├── adapter-demo.mjs    # демо-адаптер
 │   ├── .env.example        # шаблон конфига (без секретов)
 │   └── .env                # ← ваши секреты (в git не попадает)
@@ -140,6 +152,10 @@ POST https://api.telegram.org/bot<TOKEN>/setChatMenuButton
 **Данные кто-то ещё увидит?** Без валидной подписи Telegram — нет. Для дополнительной страховки задайте `ALLOWED_USER_IDS` в `server/.env`.
 
 **SQLite ошибка при старте.** Мост открывает базу в read-only и не мешает ZCODE. Проверьте путь `ZCODE_DB` в `server/.env`, если база нестандартная.
+
+**Изменил бота с телефона, а он не отреагировал.** Мост правит тот же `bot-config.v3.json`, что и панель Bots. Если ZCode не подхватил изменение на лету — переоткройте панель Bots (или перезапустите ZCode) один раз.
+
+**Почему нельзя привязать новый токен прямо с телефона?** ZCode шифрует токены собственным ключом (`enc:v1`), воспроизвести это шифрование извне нельзя — так безопаснее. Мини-апп проверяет токен через Telegram (getMe), а вставить его в панель Bots нужно один раз на компьютере. Всё остальное управление — полностью с телефона.
 
 ---
 

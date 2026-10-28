@@ -226,6 +226,16 @@ async function handle(req, res) {
     } else if (route === "/api/stats") {
       const days = Math.min(Math.max(toInt(body.days, 7), 1), 30);
       sendJson(res, 200, { ok: true, ...(await adapter.stats({ days })) });
+    } else if (route === "/api/bots") {
+      sendJson(res, 200, { ok: true, ...(await adapter.bots()) });
+    } else if (route === "/api/bot/update") {
+      sendJson(res, 200, { ok: true, ...(await adapter.botUpdate({ id: String(body.id || ""), patch: body.patch || {} })) });
+    } else if (route === "/api/bot/delete") {
+      sendJson(res, 200, { ok: true, ...(await adapter.botDelete({ id: String(body.id || "") })) });
+    } else if (route === "/api/bot/link") {
+      sendJson(res, 200, { ok: true, ...(await adapter.botLink({ token: String(body.token || "") })) });
+    } else if (route === "/api/projects") {
+      sendJson(res, 200, { ok: true, ...(await adapter.projects()) });
     } else {
       sendJson(res, 404, { ok: false, error: "Not found" });
     }

@@ -6,6 +6,7 @@ import path from "node:path";
 import os from "node:os";
 import { EventEmitter } from "node:events";
 import { DatabaseSync } from "node:sqlite";
+import { BotManager } from "./bot-manager.mjs";
 
 export class ZcodeAdapter {
   constructor(opts = {}) {
@@ -13,6 +14,7 @@ export class ZcodeAdapter {
     this.dbPath = opts.dbPath || process.env.ZCODE_DB ||
       path.join(os.homedir(), ".zcode", "cli", "db", "db.sqlite");
     this.events = new EventEmitter();
+    this.botManager = new BotManager();
     this.db = null;
     this.pollTimer = null;
     this._tokensCache = null;
@@ -22,12 +24,15 @@ export class ZcodeAdapter {
 
   start() {
     this.db = new DatabaseSync(this.dbPath, { readOnly: true });
+    this.botManager.events.on("refresh", (ev) => this.events.emit("refresh", ev));
+    this.botManager.start();
     this._poll();
     this.pollTimer = setInterval(() => this._poll(), 3_000);
   }
 
   stop() {
     clearInterval(this.pollTimer);
+    this.botManager.stop();
     try { this.db?.close(); } catch { /* noop */ }
   }
 
@@ -111,6 +116,36 @@ export class ZcodeAdapter {
   }
 
   /* ---------- API для моста ---------- */
+
+  /* Управление ботами (делегируется BotManager) и список проектов */
+
+  async bots() {
+    return this.botManager.listBots();
+  }
+
+  async botUpdate({ id, patch }) {
+    return this.botManager.updateBot({ id, patch });
+  }
+
+  async botDelete({ id }) {
+    return this.botManager.deleteBot({ id });
+  }
+
+  async botLink({ token }) {
+    return this.botManager.linkBot({ token });
+  }
+
+  async projects() {
+    const rows = this.q(
+      `SELECT project_id, MIN(directory) AS directory
+       FROM session WHERE directory IS NOT NULL
+       GROUP BY project_id
+       ORDER BY MAX(time_updated) DESC LIMIT 20`
+    );
+    return {
+      projects: rows.map((r) => ({ id: r.project_id, directory: r.directory })),
+    };
+  }
 
   async overview() {
     const dayStart = this.dayStartMs();

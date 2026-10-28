@@ -60,6 +60,24 @@ export class DemoAdapter {
       tools: TOOLS.map(([name, count]) => ({ name, count, avgMs: 120 + i * 30 })),
     }));
 
+    this.demoBots = [
+      {
+        id: "demo_bot1",
+        name: "",
+        displayName: "Demo Helper",
+        provider: "telegram",
+        providerUserId: "7000000001",
+        enabled: true,
+        running: true,
+        replyMode: "assistant_changes",
+        allowedWorkspaces: ["*"],
+        allowedCommands: { status: true, new: true, workspace: true, model: true, mode: true, thoughtLevel: true, reply: true },
+        workspacePath: DIRS[0],
+        stateUpdatedAt: now,
+        linked: true,
+      },
+    ];
+
     this.timer = setInterval(() => {
       const live = this.sessions[0];
       const r = Math.random();
@@ -91,6 +109,50 @@ export class DemoAdapter {
 
   stop() {
     clearInterval(this.timer);
+  }
+
+  /* ---------- боты (демо-версия управления) ---------- */
+
+  async bots() {
+    return { bots: this.demoBots, polling: this.demoBots.some((b) => b.enabled) };
+  }
+
+  async botUpdate({ id, patch }) {
+    const b = this.demoBots.find((x) => x.id === id);
+    if (!b) throw new Error("Бот не найден");
+    if (patch.enabled !== undefined) { b.enabled = !!patch.enabled; b.running = b.enabled && b.running; }
+    if (patch.name !== undefined) b.name = String(patch.name).slice(0, 64);
+    if (patch.replyMode !== undefined) b.replyMode = patch.replyMode;
+    if (patch.allowedWorkspaces !== undefined) b.allowedWorkspaces = patch.allowedWorkspaces === "*" ? ["*"] : patch.allowedWorkspaces;
+    if (patch.allowedCommands !== undefined) b.allowedCommands = { ...b.allowedCommands, ...patch.allowedCommands };
+    this.events.emit("refresh", { scope: "bots" });
+    return { updated: id };
+  }
+
+  async botDelete({ id }) {
+    const before = this.demoBots.length;
+    this.demoBots = this.demoBots.filter((x) => x.id !== id);
+    if (this.demoBots.length === before) throw new Error("Бот не найден");
+    this.events.emit("refresh", { scope: "bots" });
+    return { deleted: id };
+  }
+
+  async botLink({ token }) {
+    const t = String(token || "").trim();
+    if (!/^\d{6,12}:[A-Za-z0-9_-]{30,}$/.test(t)) throw new Error("Токен не похож на формат BotFather");
+    const exists = this.demoBots.find((b) => b.providerUserId === "7000000001");
+    return {
+      verified: true,
+      username: "demo_helper_bot",
+      displayName: "Demo Helper",
+      alreadyLinked: !!exists,
+      existingId: exists?.id ?? null,
+      hint: "Демо: токен проверен по формату, реальный вызов Telegram выполняет только мост.",
+    };
+  }
+
+  async projects() {
+    return { projects: DIRS.map((d, i) => ({ id: `proj_demo_${i}`, directory: d })) };
   }
 
   async overview() {
