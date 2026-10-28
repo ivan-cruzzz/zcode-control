@@ -1,7 +1,7 @@
 /* ZCODE Control v2 — корневой компонент: состояние, навигация, подключение. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
 import { Dock, type ViewId } from "@/components/Dock";
 import { Overview } from "@/views/Overview";
 import { Sessions } from "@/views/Sessions";
@@ -196,6 +196,17 @@ export default function App() {
       </header>
 
       <main className="mx-auto min-h-[calc(100dvh-140px)] max-w-md px-4 pb-28 pt-3">
+        {status === "offline" && !isDemo && (
+          <a
+            href="https://t.me/MyWzcode_bot"
+            target="_blank"
+            rel="noopener"
+            className="mb-3 flex items-center justify-between gap-2 rounded-[16px] border border-[#F97316]/40 bg-[#F97316]/10 p-3.5 text-[13px] text-[#C2410C]"
+          >
+            <span>Нет связи. Адрес туннеля обновился —<br />откройте бота и тапните кнопку меню.</span>
+            <ChevronRight size={18} className="shrink-0" />
+          </a>
+        )}
         {status === "connecting" ? (
           <p className="mt-16 text-center font-mono text-[13px] text-muted-foreground">подключение…</p>
         ) : view === "overview" ? (
