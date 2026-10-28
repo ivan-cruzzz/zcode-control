@@ -1,0 +1,17 @@
+{
+  "name": "zcode-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Локальный мост между ZCODE и Telegram Mini App (ZCODE Control)",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "start": "node bridge.mjs",
+    "demo": "node bridge.mjs --demo"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

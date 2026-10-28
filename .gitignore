@@ -1,0 +1,17 @@
+# секреты — НИКОГДА не коммитим
+.env
+*.local
+server/.env
+
+# зависимости
+node_modules/
+
+# локальные скрипты и служебные файлы рабочей папки (не часть проекта)
+.v2c/
+query_sessions.cjs
+search_msgs.cjs
+
+# мусор ОС
+.DS_Store
+Thumbs.db
+desktop.ini
