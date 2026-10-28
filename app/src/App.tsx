@@ -197,22 +197,28 @@ export default function App() {
 
       <main className="mx-auto min-h-[calc(100dvh-140px)] max-w-md px-4 pb-28 pt-3">
         {status === "offline" && !isDemo && (
-          <a
-            href="https://t.me/MyWzcode_bot"
-            target="_blank"
-            rel="noopener"
-            className="mb-3 flex items-center justify-between gap-2 rounded-[16px] border border-[#F97316]/40 bg-[#F97316]/10 p-3.5 text-[13px] text-[#C2410C]"
-          >
-            <span>Нет связи. Адрес туннеля обновился —<br />откройте бота и тапните кнопку меню.</span>
-            <ChevronRight size={18} className="shrink-0" />
-          </a>
+          setup?.bot?.username ? (
+            <a
+              href={`https://t.me/${setup.bot.username}`}
+              target="_blank"
+              rel="noopener"
+              className="mb-3 flex items-center justify-between gap-2 rounded-[16px] border border-[#F97316]/40 bg-[#F97316]/10 p-3.5 text-[13px] text-[#C2410C]"
+            >
+              <span>Нет связи. Адрес туннеля обновился —<br />откройте бота и тапните кнопку меню.</span>
+              <ChevronRight size={18} className="shrink-0" />
+            </a>
+          ) : (
+            <div className="mb-3 rounded-[16px] border border-[#F97316]/40 bg-[#F97316]/10 p-3.5 text-[13px] text-[#C2410C]">
+              Нет связи. Откройте вашего бота в Telegram и тапните кнопку меню — адрес туннеля обновится.
+            </div>
+          )
         )}
         {status === "connecting" ? (
           <p className="mt-16 text-center font-mono text-[13px] text-muted-foreground">подключение…</p>
         ) : view === "overview" ? (
           <Overview client={client} setup={setup} refreshTick={refreshTick} onPair={pair} onGuide={() => setGuideOpen(true)} onOpenSession={openSession} />
         ) : view === "sessions" ? (
-          <Sessions client={client} refreshTick={refreshTick} focusSession={focusSession} botUsername={setup?.bot?.username ?? "MyWzcode_bot"} />
+          <Sessions client={client} refreshTick={refreshTick} focusSession={focusSession} botUsername={setup?.bot?.username ?? ""} />
         ) : view === "console" ? (
           <Console messages={consoleMsgs} setMessages={setConsoleMsgs} ctx={commandCtx} />
         ) : view === "bots" ? (

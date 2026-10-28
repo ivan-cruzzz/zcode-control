@@ -158,11 +158,15 @@ export class BotLink {
   }
 
   async sendLaunch(chatId, url) {
-    let username = "MyWzcode_bot";
+    let username = null;
     try {
       const me = await this.api("getMe", {}, 8_000);
       if (me.ok) username = me.result.username;
-    } catch { /* используем известное имя */ }
+    } catch { /* повторим при следующем анонсе */ }
+    if (!username) {
+      this.log("getMe не удался — кнопку не отправил, повторится при следующем туннеле");
+      return;
+    }
     const link = `https://t.me/${username}?startapp=${b64url(url)}`;
     await this.api("sendMessage", {
       chat_id: chatId,

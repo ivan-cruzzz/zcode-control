@@ -22,3 +22,5 @@ search_msgs.cjs
 .DS_Store
 Thumbs.db
 desktop.ini
+legacy-app/
+out/
