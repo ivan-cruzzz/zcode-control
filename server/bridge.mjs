@@ -349,6 +349,15 @@ const server = http.createServer((req, res) => {
   });
 });
 
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`[bridge] Порт ${CONFIG.port} уже занят — скорее всего мост уже запущен в другом окне.`);
+    console.error(`[bridge] Закройте то окно, либо запустите этот мост на другом порту: set PORT=8788 && npm start`);
+    process.exit(1);
+  }
+  throw err;
+});
+
 /* ---------- WebSocket ---------- */
 
 const wss = new WebSocketServer({ server, path: "/ws" });
