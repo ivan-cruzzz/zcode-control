@@ -35,6 +35,7 @@ export class ZcodeAdapter {
   stop() {
     clearInterval(this.pollTimer);
     this.botManager.stop();
+    try { this.dbWrite?.close(); } catch { /* noop */ }
     try { this.db?.close(); } catch { /* noop */ }
   }
 
@@ -237,8 +238,17 @@ export class ZcodeAdapter {
   }
 
   /* Экспериментально: поставить текст пользователя в очередь ввода сессии
-     (session_input, kind=sendText). ZCode подхватит, если сессия принимает
-     ввод из очереди; надёжный канал — чат бота, привязанного к ZCode. */
+     (session_input, kind=sendText). Нужна отдельная read-write связь:
+     основная открыта только для чтения. ZCode подхватит сообщение, если
+     сессия принимает ввод из очереди; надёжный канал — чат бота. */
+  _writableDb() {
+    if (!this.dbWrite || !this.dbWrite.open) {
+      this.dbWrite = new DatabaseSync(this.dbPath);
+      this.dbWrite.exec("PRAGMA busy_timeout = 4000");
+    }
+    return this.dbWrite;
+  }
+
   async sessionSend({ id, text }) {
     const s = this.q("SELECT id FROM session WHERE id = ? AND time_deleted IS NULL", id)[0];
     if (!s) throw new Error("Сессия не найдена");
@@ -269,12 +279,20 @@ export class ZcodeAdapter {
       attachments: [],
       sourceCommandType: "sendText",
     };
-    this.db.prepare(
-      `INSERT INTO session_input
-       (id, session_id, kind, delivery, payload, admitted_sequence, promoted_sequence,
-        promoted_message_id, status, status_reason, time_created, time_updated)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
-    ).run(qid, id, "sendText", "startNow", JSON.stringify(payload), rowSeq, rowSeq, null, "promoted", null, now, now);
+    try {
+      this._writableDb().prepare(
+        `INSERT INTO session_input
+         (id, session_id, kind, delivery, payload, admitted_sequence, promoted_sequence,
+          promoted_message_id, status, status_reason, time_created, time_updated)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).run(qid, id, "sendText", "startNow", JSON.stringify(payload), rowSeq, rowSeq, null, "promoted", null, now, now);
+    } catch (err) {
+      throw new Error(
+        err.code === "SQLITE_BUSY" || /readonly|locked/i.test(err.message)
+          ? "База ZCODE сейчас не принимает запись (занята приложением). Надёжный канал — чат бота."
+          : "Не удалось поставить сообщение в очередь: " + err.message
+      );
+    }
     this.events.emit("refresh", { scope: "session", id });
     return { queued: true, note: "текст поставлен в очередь ввода сессии" };
   }

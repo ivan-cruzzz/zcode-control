@@ -107,6 +107,7 @@ function SessionSheet({ id, client, onClose }: { id: string; client: AppClient; 
   const [outgoing, setOutgoing] = useState<any[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -131,13 +132,15 @@ function SessionSheet({ id, client, onClose }: { id: string; client: AppClient; 
     const text = draft.trim();
     if (!text || sending) return;
     setSending(true);
+    setErr(null);
     try {
       await client.sessionSend(id, text);
       setOutgoing((o) => [...o, { id: `out${Date.now()}`, role: "user", time: Date.now(), text, queued: true }]);
       setDraft("");
       haptic.notify();
     } catch (e: any) {
-      alert(e.message);
+      setErr(e.message);
+      haptic.notify("error");
     } finally {
       setSending(false);
     }
@@ -211,6 +214,14 @@ function SessionSheet({ id, client, onClose }: { id: string; client: AppClient; 
 
       {/* ввод внизу, как в мессенджере */}
       <div className="border-t border-border px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-2">
+        {err && (
+          <div className="mb-2 rounded-[12px] border border-[#EF4444]/40 bg-[#EF4444]/10 p-2.5 text-[12px] text-[#DC2626]">
+            {err}
+            <a href="https://t.me/MyWzcode_bot" target="_blank" rel="noopener" className="ml-1 underline">
+              Открыть чат бота
+            </a>
+          </div>
+        )}
         <div className="flex items-end gap-2">
           <input
             value={draft}
