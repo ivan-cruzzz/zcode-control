@@ -212,7 +212,7 @@ export default function App() {
         ) : view === "overview" ? (
           <Overview client={client} setup={setup} refreshTick={refreshTick} onPair={pair} onGuide={() => setGuideOpen(true)} onOpenSession={openSession} />
         ) : view === "sessions" ? (
-          <Sessions client={client} refreshTick={refreshTick} focusSession={focusSession} />
+          <Sessions client={client} refreshTick={refreshTick} focusSession={focusSession} botUsername={setup?.bot?.username ?? "MyWzcode_bot"} />
         ) : view === "console" ? (
           <Console messages={consoleMsgs} setMessages={setConsoleMsgs} ctx={commandCtx} />
         ) : view === "bots" ? (

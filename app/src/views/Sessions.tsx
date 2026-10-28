@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 
 const ACTIVE_WINDOW = 5 * 60_000;
 
-export function Sessions({ client, refreshTick, focusSession }: { client: AppClient; refreshTick: number; focusSession: string | null }) {
+export function Sessions({ client, refreshTick, focusSession, botUsername }: { client: AppClient; refreshTick: number; focusSession: string | null; botUsername: string }) {
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [filter, setFilter] = useState("");
   const [global, setGlobal] = useState<{ title: string; items: any[] } | null>(null);
@@ -97,17 +97,18 @@ export function Sessions({ client, refreshTick, focusSession }: { client: AppCli
         </div>
       )}
 
-      {open && <SessionSheet id={open} client={client} onClose={() => setOpen(null)} />}
+      {open && <SessionSheet id={open} client={client} botUsername={botUsername} onClose={() => setOpen(null)} />}
     </div>
   );
 }
 
-function SessionSheet({ id, client, onClose }: { id: string; client: AppClient; onClose: () => void }) {
+function SessionSheet({ id, client, botUsername, onClose }: { id: string; client: AppClient; botUsername: string; onClose: () => void }) {
   const [data, setData] = useState<any>(null);
   const [outgoing, setOutgoing] = useState<any[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -134,10 +135,15 @@ function SessionSheet({ id, client, onClose }: { id: string; client: AppClient; 
     setSending(true);
     setErr(null);
     try {
-      await client.sessionSend(id, text);
-      setOutgoing((o) => [...o, { id: `out${Date.now()}`, role: "user", time: Date.now(), text, queued: true }]);
+      // Единственный реальный канал в ZCODE — ваше сообщение в чате бота.
+      // Копируем текст и открываем чат бота: вставить → отправить.
+      try { await navigator.clipboard.writeText(text); } catch { /* ручная вставка */ }
+      setOutgoing((o) => [...o, { id: `out${Date.now()}`, role: "user", time: Date.now(), text, queued: false }]);
       setDraft("");
       haptic.notify();
+      setErr(null);
+      setHint(`Текст скопирован — вставьте в чате @${botUsername} и отправьте. Ответ появится здесь автоматически.`);
+      tg?.openTelegramLink?.(`https://t.me/${botUsername}`);
     } catch (e: any) {
       setErr(e.message);
       haptic.notify("error");
@@ -215,19 +221,17 @@ function SessionSheet({ id, client, onClose }: { id: string; client: AppClient; 
       {/* ввод внизу, как в мессенджере */}
       <div className="border-t border-border px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-2">
         {err && (
-          <div className="mb-2 rounded-[12px] border border-[#EF4444]/40 bg-[#EF4444]/10 p-2.5 text-[12px] text-[#DC2626]">
-            {err}
-            <a href="https://t.me/MyWzcode_bot" target="_blank" rel="noopener" className="ml-1 underline">
-              Открыть чат бота
-            </a>
-          </div>
+          <div className="mb-2 rounded-[12px] border border-[#EF4444]/40 bg-[#EF4444]/10 p-2.5 text-[12px] text-[#DC2626]">{err}</div>
+        )}
+        {hint && (
+          <div className="mb-2 rounded-[12px] border border-[#2563EB]/40 bg-[#2563EB]/10 p-2.5 text-[12px] text-[#2563EB] dark:text-[#3B82F6]">{hint}</div>
         )}
         <div className="flex items-end gap-2">
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") send(); }}
-            placeholder="Сообщение в сессию…"
+            placeholder="Текст для ZCODE…"
             aria-label="Сообщение в сессию"
             className="h-11 min-w-0 flex-1 rounded-[9999px] border border-border bg-card px-4 text-[15px] outline-none placeholder:text-muted-foreground focus:border-foreground/40"
           />

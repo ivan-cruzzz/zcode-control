@@ -4,7 +4,6 @@
 
 import path from "node:path";
 import os from "node:os";
-import crypto from "node:crypto";
 import { EventEmitter } from "node:events";
 import { DatabaseSync } from "node:sqlite";
 import { BotManager } from "./bot-manager.mjs";
@@ -235,66 +234,6 @@ export class ZcodeAdapter {
         tokens: tokens.get(r.id) ?? 0,
       })),
     };
-  }
-
-  /* Экспериментально: поставить текст пользователя в очередь ввода сессии
-     (session_input, kind=sendText). Нужна отдельная read-write связь:
-     основная открыта только для чтения. ZCode подхватит сообщение, если
-     сессия принимает ввод из очереди; надёжный канал — чат бота. */
-  _writableDb() {
-    if (!this.dbWrite || !this.dbWrite.open) {
-      this.dbWrite = new DatabaseSync(this.dbPath);
-      this.dbWrite.exec("PRAGMA busy_timeout = 4000");
-    }
-    return this.dbWrite;
-  }
-
-  async sessionSend({ id, text }) {
-    const s = this.q("SELECT id FROM session WHERE id = ? AND time_deleted IS NULL", id)[0];
-    if (!s) throw new Error("Сессия не найдена");
-    const now = Date.now();
-    const cmd = crypto.randomUUID();
-    const qid = `queue_${cmd}`;
-    const clientId = "client-zcode-control-bridge";
-    const seq = this.q(
-      "SELECT COALESCE(MAX(json_extract(payload,'$.intent.admissionSeq')),0)+1 AS s FROM session_input"
-    )[0]?.s ?? 1;
-    const rowSeq = this.q(
-      "SELECT COALESCE(MAX(admitted_sequence),0)+1 AS s FROM session_input WHERE session_id = ?", id
-    )[0]?.s ?? 1;
-    const payload = {
-      text,
-      intent: {
-        sourceCommandId: cmd, queueItemId: qid, clientId, kind: "sendText",
-        admissionSeq: seq, admittedAt: now,
-        requestedDelivery: "startNow", admittedDelivery: "startNow", attachmentRefs: [],
-      },
-      conversationInputIntent: {
-        inputOrigin: "bridge", sourceCommandId: cmd, queueItemId: qid, clientId,
-        kind: "sendText", text, attachments: [],
-        delivery: { requested: "startNow", admitted: "startNow" },
-        order: { admissionSeq: seq }, steer: { state: "notRequested" },
-        dispatch: { state: "admitted" }, admittedAt: now,
-      },
-      attachments: [],
-      sourceCommandType: "sendText",
-    };
-    try {
-      this._writableDb().prepare(
-        `INSERT INTO session_input
-         (id, session_id, kind, delivery, payload, admitted_sequence, promoted_sequence,
-          promoted_message_id, status, status_reason, time_created, time_updated)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
-      ).run(qid, id, "sendText", "startNow", JSON.stringify(payload), rowSeq, rowSeq, null, "promoted", null, now, now);
-    } catch (err) {
-      throw new Error(
-        err.code === "SQLITE_BUSY" || /readonly|locked/i.test(err.message)
-          ? "База ZCODE сейчас не принимает запись (занята приложением). Надёжный канал — чат бота."
-          : "Не удалось поставить сообщение в очередь: " + err.message
-      );
-    }
-    this.events.emit("refresh", { scope: "session", id });
-    return { queued: true, note: "текст поставлен в очередь ввода сессии" };
   }
 
   async sessionDetail({ id }) {
