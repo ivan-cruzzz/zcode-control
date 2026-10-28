@@ -137,14 +137,25 @@ function createClient() {
 async function connectClient() {
   $("ovDemoNote").hidden = !state.isDemo;
   $("connStatus").textContent = "Подключение…";
+  $("pairRow").hidden = true;
   try {
     const res = await state.client.connect(getInitData());
     if (state.isDemo) {
       setStatus("demo");
       $("connStatus").textContent = "Демо-режим: показаны сгенерированные данные.";
+    } else if (res.pairing) {
+      setStatus("online");
+      $("pairRow").hidden = false;
+      $("connStatus").textContent = "Мост ещё не закреплён ни за кем. Нажмите кнопку ниже — и он будет отвечать только вам.";
+      showToast("Мост требует привязки владельца", "", 3600);
+      renderOverviewError("Закрепите мост за своим аккаунтом — кнопка в Настройках", "Требуется привязка");
+    } else if (res.ownerMismatch) {
+      setStatus("offline");
+      $("connStatus").textContent = "Мост закреплён за другим аккаунтом. Доступ только для владельца.";
+      renderOverviewError("Доступ только для владельца моста");
     } else {
       haptic.notify("success");
-      $("connStatus").textContent = `Подключено${res.user?.first_name ? " как " + res.user.first_name : ""}.`;
+      $("connStatus").textContent = `Подключено${res.user?.first_name ? " как " + res.user.first_name : ""} · доступ: только владелец.`;
     }
     refreshAll();
   } catch (e) {
@@ -212,15 +223,15 @@ function renderOverview(data) {
     : `<div class="empty">Пока тихо — активности не было.</div>`;
 }
 
-function renderOverviewError(msg) {
+function renderOverviewError(msg, title = "Мост недоступен") {
   $("ovStatus").dataset.state = "offline";
   $("ovStatus").innerHTML = `
     <div class="hero-top">
       <span class="pulse-dot" aria-hidden="true"></span>
-      <span class="hero-state">нет связи</span>
+      <span class="hero-state">${esc(title)}</span>
     </div>
-    <h2 class="hero-title">Мост недоступен</h2>
-    <div class="hero-meta">${esc(msg || "")}</div>`;
+    <h2 class="hero-title">${esc(msg || "")}</h2>
+    <div class="hero-meta">Подробнее — в Настройках</div>`;
   $("ovStats").innerHTML = "";
   $("ovActivity").innerHTML = `<div class="empty">Запустите мост на компьютере и укажите его адрес в Настройках.</div>`;
 }
@@ -812,6 +823,29 @@ function bindSettings() {
   });
 
   $("btnBack").addEventListener("click", closeDetail);
+
+  $("btnPair").addEventListener("click", async () => {
+    const btn = $("btnPair");
+    btn.disabled = true;
+    btn.textContent = "Закрепляю…";
+    try {
+      const res = await state.client.pair();
+      haptic.notify("success");
+      showToast("Мост закреплён за вашим аккаунтом", "ok", 3200);
+      $("pairRow").hidden = true;
+      state.overviewLoaded = false;
+      state.sessionsLoaded = false;
+      state.botsLoaded = false;
+      await connectClient();
+    } catch (e) {
+      haptic.notify("error");
+      showToast("Ошибка: " + e.message, "err", 3600);
+      $("connStatus").textContent = e.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Закрепить этот аккаунт за мостом";
+    }
+  });
 }
 
 /* ============================ Запуск ============================ */

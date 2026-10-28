@@ -2,6 +2,7 @@
 .env
 *.local
 server/.env
+server/.owner.json
 
 # зависимости
 node_modules/

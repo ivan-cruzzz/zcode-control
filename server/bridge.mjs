@@ -61,6 +61,20 @@ if (!CONFIG.botToken) {
   process.exit(1);
 }
 
+/* ---------- владелец ----------
+   Первый вошедший аккаунт Telegram закрепляется за мостом (server/.owner.json).
+   После этого все запросы от других аккаунтов отклоняются — даже с валидной подписью. */
+
+const OWNER_FILE = path.join(__dirname, ".owner.json");
+
+function loadOwner() {
+  try { return JSON.parse(fs.readFileSync(OWNER_FILE, "utf8")); } catch { return null; }
+}
+
+function saveOwner(o) {
+  fs.writeFileSync(OWNER_FILE, JSON.stringify(o, null, 2) + "\n", "utf8");
+}
+
 /* ---------- проверка Telegram initData ----------
    secret = HMAC_SHA256("WebAppData", bot_token)
    hash   = HMAC_SHA256(data_check_string, secret)
@@ -208,11 +222,56 @@ async function handle(req, res) {
   }
 
   const route = url.pathname;
+  const uid = auth.user?.id ?? null;
+
+  // Привязка владельца: первый вошедший аккаунт закрепляется навсегда
+  if (route === "/api/pair") {
+    const owner = loadOwner();
+    if (owner) {
+      if (owner.userId !== uid) {
+        sendJson(res, 403, { ok: false, error: "Мост уже привязан к другому аккаунту" });
+        return;
+      }
+      sendJson(res, 200, { ok: true, paired: true, owner: { userId: owner.userId } });
+      return;
+    }
+    if (!uid) {
+      sendJson(res, 403, { ok: false, error: "В initData нет пользователя" });
+      return;
+    }
+    const o = { userId: uid, name: auth.user?.first_name ?? "", username: auth.user?.username ?? null, pairedAt: Date.now() };
+    saveOwner(o);
+    log(`владелец закреплён: ${uid} (${o.name})`);
+    sendJson(res, 200, { ok: true, paired: true, owner: { userId: uid } });
+    return;
+  }
+
+  // Всё остальное — только для владельца (после привязки)
+  const owner = loadOwner();
+
   try {
     if (route === "/api/auth") {
       const { id, first_name, username } = auth.user || {};
-      sendJson(res, 200, { ok: true, user: { id, first_name, username }, mode: adapter.mode });
-    } else if (route === "/api/overview") {
+      sendJson(res, 200, {
+        ok: true,
+        user: { id, first_name, username },
+        mode: adapter.mode,
+        paired: !!owner,
+        pairing: !owner,
+        ownerMatch: owner ? uid === owner.userId : null,
+      });
+      return;
+    }
+    if (!owner) {
+      sendJson(res, 403, { ok: false, error: "Требуется привязка владельца", pairing: true });
+      return;
+    }
+    if (uid !== owner.userId) {
+      log(`чужой пользователь ${uid} — отказано`);
+      sendJson(res, 403, { ok: false, error: "Доступ только для владельца моста" });
+      return;
+    }
+    if (route === "/api/overview") {
       sendJson(res, 200, { ok: true, ...(await adapter.overview()) });
     } else if (route === "/api/sessions") {
       sendJson(res, 200, { ok: true, ...(await adapter.sessions({ limit: body.limit })) });

@@ -68,6 +68,18 @@ export class BridgeClient {
       if (!res.ok) throw new Error(res.error || "Авторизация не пройдена");
       this.user = res.user ?? null;
       this.mode = res.mode ?? "zcode";
+      this.paired = !!res.paired;
+      this.pairing = !!res.pairing;
+      this.ownerMatch = res.ownerMatch;
+      if (res.pairing) {
+        // мост ещё не закреплён: открываем WS нельзя, ждём /api/pair
+        this._setStatus("online");
+        return { ok: true, user: this.user, mode: this.mode, pairing: true };
+      }
+      if (this.ownerMatch === false) {
+        this._setStatus("offline");
+        return { ok: true, user: this.user, mode: this.mode, ownerMismatch: true };
+      }
     } catch (err) {
       this._setStatus("offline");
       throw err;
@@ -182,5 +194,8 @@ export class BridgeClient {
   }
   async projects() {
     return postJson(`${this.baseUrl}/api/projects`, { initData: this.initData });
+  }
+  async pair() {
+    return postJson(`${this.baseUrl}/api/pair`, { initData: this.initData });
   }
 }
