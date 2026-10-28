@@ -41,6 +41,25 @@ function parseIds(v) {
 
 loadEnv(path.join(__dirname, ".env"));
 
+/* Первый запуск без .env: мост сам спрашивает токен и создаёт файл —
+   никакой возни с блокнотом не нужно. */
+if (!fs.existsSync(path.join(__dirname, ".env"))) {
+  const { createInterface } = await import("node:readline/promises");
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  console.log("\nПервый запуск: нужна настройка (займёт 10 секунд).");
+  console.log("Токен — у @BotFather в Telegram: /mybots → ваш бот → API Token.");
+  let token = (await rl.question("\nВставьте токен и нажмите Enter:\n> ")).trim();
+  rl.close();
+  if (!/^\d{6,12}:[A-Za-z0-9_-]{30,}$/.test(token)) {
+    console.error("\nЭто не похоже на токен BotFather (формат: 123456789:AA…).");
+    console.error("Запустите npm start ещё раз и вставьте токен целиком.");
+    process.exit(1);
+  }
+  fs.writeFileSync(path.join(__dirname, ".env"), `BOT_TOKEN=${token}\nPORT=8787\nMAX_AUTH_AGE=86400\nRATE_LIMIT=120\n`, "utf8");
+  console.log("Готово: файл .env создан (в git не попадает). Запускаюсь…\n");
+  loadEnv(path.join(__dirname, ".env"));
+}
+
 const CONFIG = {
   port: toInt(process.env.PORT, 8787),
   botToken: process.env.BOT_TOKEN || "",
