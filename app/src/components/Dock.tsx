@@ -39,7 +39,7 @@ export function Dock({ view, onNavigate }: { view: ViewId; onNavigate: (v: ViewI
               )}
             >
               <Icon
-                size={20}
+                size={18}
                 strokeWidth={2}
                 className={cn(
                   "transition-colors duration-150",
@@ -47,13 +47,20 @@ export function Dock({ view, onNavigate }: { view: ViewId; onNavigate: (v: ViewI
                 )}
               />
               <span
+                className={cn(
+                  "text-[9px] leading-none transition-colors duration-150",
+                  active ? "text-[#2563EB] dark:text-[#3B82F6]" : "text-[#6B6B6B] dark:text-gray-500",
+                )}
+              >
+                {label}
+              </span>
+              <span
                 aria-hidden
                 className={cn(
-                  "absolute bottom-1 h-1 w-1 rounded-full transition-all duration-150",
+                  "absolute bottom-0.5 h-1 w-1 rounded-full transition-all duration-150",
                   active ? "bg-[#2563EB] dark:bg-[#3B82F6]" : "bg-transparent",
                 )}
               />
-              <span className="sr-only">{label}</span>
             </button>
           );
         })}

@@ -14,6 +14,13 @@ const SLASH: PromptCommand[] = COMMAND_DEFS.map((c, i) => ({
   icon: <span className="font-mono text-[10px] text-[#8B5CF6]">{String(i + 1).padStart(2, "0")}</span>,
 }));
 
+/* модели Z.ai — селектор в AI prompt box */
+const ZAI_MODELS = [
+  { name: "GLM-5.3", description: "флагман Z.ai для сложных задач", efforts: ["Low", "Medium", "High"], defaultEffort: "High" },
+  { name: "GLM-4.6", description: "универсальная модель", efforts: ["Low", "Medium", "High"], defaultEffort: "Medium" },
+  { name: "GLM-5.3-Flash", description: "максимальная скорость" },
+];
+
 export function Console({
   messages,
   setMessages,
@@ -29,10 +36,10 @@ export function Console({
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
-  async function handle(value: string) {
+  async function handle(value: string, model: string) {
     const text = value.trim();
     if (!text) return;
-    const userMsg: ConsoleMsg = { id: `u${Date.now()}`, role: "user", text, time: Date.now() };
+    const userMsg: ConsoleMsg = { id: `u${Date.now()}`, role: "user", text, time: Date.now(), meta: model };
     setMessages((m) => [...m.slice(-80), userMsg]);
     const reply = await runCommand(text, ctx);
     if (reply) {
@@ -59,7 +66,7 @@ export function Console({
             <div key={m.id} className="flex justify-end">
               <div className="max-w-[85%] rounded-[16px] rounded-br-[5px] bg-white px-3 py-2 text-[13.5px] whitespace-pre-wrap text-[#111] shadow-[0_8px_30px_rgba(0,0,0,0.18)]">
                 {m.text}
-                <div className="mt-1 text-right font-mono text-[10px] text-[#9CA3AF]">{fmtClock(m.time)}</div>
+                <div className="mt-1 text-right font-mono text-[10px] text-[#9CA3AF]">{m.meta ? m.meta + " · " : ""}{fmtClock(m.time)}</div>
               </div>
             </div>
           ) : (
@@ -77,9 +84,11 @@ export function Console({
         <AI_Prompt
           placeholder="Команда пульта… «/» — список"
           headerText=""
+          models={ZAI_MODELS}
+          defaultModel="GLM-5.3"
           commands={SLASH}
-          onSubmit={async (value) => {
-            await handle(value);
+          onSubmit={async (value, model) => {
+            await handle(value, model);
           }}
         />
       </div>

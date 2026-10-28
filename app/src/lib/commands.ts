@@ -6,7 +6,7 @@ import { fmtTokens } from "@/lib/format";
 import type { ViewId } from "@/components/Dock";
 import type { ThemeMode } from "@/lib/tg";
 
-export type ConsoleMsg = { id: string; role: "user" | "assistant"; text: string; time: number };
+export type ConsoleMsg = { id: string; role: "user" | "assistant"; text: string; time: number; meta?: string };
 
 export interface CommandCtx {
   client: AppClient;

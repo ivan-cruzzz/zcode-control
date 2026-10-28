@@ -32,7 +32,7 @@ export function SetupCard({
   onGuide: () => void;
 }) {
   if (!setup) return null;
-  const { bridge, ownerPaired, bot } = setup;
+  const { bridge, ownerPaired, bot, billing, tunnel } = setup;
   const allDone = ownerPaired && bridge.dbOk && bot.linkedInZcode && bot.polling && bot.enabledInZcode;
 
   if (allDone) {
@@ -41,6 +41,7 @@ export function SetupCard({
         <h2 className="font-mono text-[13px] font-bold uppercase tracking-[0.06em] text-foreground">Всё подключено</h2>
         <p className="mt-1 text-[13px] text-muted-foreground">
           Команды — в чат <span className="font-mono">@{bot.username}</span>, состояние — здесь.
+          {billing?.pro ? " Pro активен." : ` Бесплатный туннель: ${billing?.freeMinutes ?? 60} мин за запуск.`}
         </p>
       </section>
     );
@@ -76,6 +77,11 @@ export function SetupCard({
           done={bot.polling && bot.enabledInZcode}
           label="Поллинг Telegram"
           hint={bot.polling ? "живой канал активен" : bot.linkedInZcode && !bot.enabledInZcode ? "включите тумблером во вкладке Боты" : "включится после привязки"}
+        />
+        <Row
+          done={!!tunnel?.url}
+          label={tunnel?.url ? "Туннель поднят" : billing?.pro ? "Pro: туннель по требованию" : `Туннель не поднят (лимит ${billing?.freeMinutes ?? 60} мин)`}
+          hint={billing?.pro ? "Pro: без лимита времени" : "оформление — /sub в чате бота"}
         />
       </div>
     </section>

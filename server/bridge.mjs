@@ -11,6 +11,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { Tunnel, BotLink } from "./tunnel.mjs";
+import { ZcodeBot, FREE_TUNNEL_MIN } from "./tg-bot.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -322,6 +323,10 @@ async function handle(req, res) {
         botChatPaired: botLink ? botLink.paired : false,
         botConflict: botLink ? botLink.conflict : false,
       };
+      status.billing = {
+        pro: botLink?.paired && zbotRef ? zbotRef.isPro(botLink.chatId) : false,
+        freeMinutes: FREE_TUNNEL_MIN,
+      };
       sendJson(res, 200, { ok: true, ...status });
     } else {
       sendJson(res, 404, { ok: false, error: "Not found" });
@@ -421,6 +426,7 @@ server.listen(CONFIG.port, () => {
 export let tunnelUrl = null;
 let botLink = null;
 let tunnel = null;
+let zbotRef = null;
 
 async function startExposure() {
   if (process.argv.includes("--no-expose") || process.env.EXPOSE === "0") {
@@ -443,6 +449,24 @@ async function startExposure() {
   }
   tunnel = new Tunnel({ port: CONFIG.port, bin });
   botLink = new BotLink({ token: CONFIG.botToken, dir: __dirname, log });
+  zbotRef = new ZcodeBot({
+    token: CONFIG.botToken,
+    dir: __dirname,
+    log,
+    getContext: () => ({
+      tunnelUrl,
+      mode: adapter.mode,
+      dbOk: CONFIG.demo ? true : !!adapter.dbOk,
+    }),
+  });
+  zbotRef.sendLaunchIfPossible = (chatId) => tunnelUrl && botLink.sendLaunch(chatId, tunnelUrl);
+  zbotRef.restartTunnel = async () => {
+    tunnel.stopped = false;
+    const u = await tunnel.start();
+    if (u) { tunnelUrl = u; log(`туннель (Pro): ${u}`); await botLink.announce(u); }
+  };
+  botLink.onMessage = (msg) => zbotRef.handleMessage(msg);
+  botLink.onCallback = (q) => zbotRef.handleCallback(q);
   botLink.startPolling();
 
   const url = await tunnel.start();
@@ -451,6 +475,20 @@ async function startExposure() {
     log(`туннель: ${url}`);
     log("если бот в Telegram ещё не связан — отправьте ему /start, придёт кнопка открытия");
     await botLink.announce(url);
+
+    // бесплатный лимит: туннель закрывается через FREE_TUNNEL_MIN минут, Pro снимает лимит
+    const armLimit = () => {
+      if (botLink.paired && zbotRef.isPro(botLink.chatId)) return;
+      setTimeout(async () => {
+        if (botLink.paired && zbotRef.isPro(botLink.chatId)) return;
+        tunnel.stopped = true;
+        try { tunnel.proc?.kill(); } catch { /* noop */ }
+        tunnelUrl = null;
+        log("бесплатный лимит туннеля истёк");
+        if (botLink.paired) await zbotRef.notifyTunnelExpired(botLink.chatId);
+      }, FREE_TUNNEL_MIN * 60_000);
+    };
+    armLimit();
   } else {
     log("туннель не поднялся — адрес можно указать вручную любым способом (cloudflared/ngrok)");
   }

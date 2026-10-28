@@ -101,7 +101,7 @@ export class BotLink {
       while (this.running) {
         try {
           const offset = this.readOffset();
-          const j = await this.api("getUpdates", { timeout: 25, offset, allowed_updates: ["message"] });
+          const j = await this.api("getUpdates", { timeout: 25, offset, allowed_updates: ["message", "callback_query", "pre_checkout_query"] });
           if (!j.ok) {
             if (j.error_code === 409) {
               // того же бота опрашивает кто-то ещё (например, панель Bots ZCode) — уступаем
@@ -115,8 +115,18 @@ export class BotLink {
           }
           for (const u of j.result || []) {
             this.writeOffset(u.update_id + 1);
+            if (u.callback_query) await this.onCallback?.(u.callback_query);
             const msg = u.message;
-            if (msg?.chat?.id) this.handleMessage(msg);
+            if (msg?.chat?.id) {
+              // закрепление чата владельца остаётся здесь; обработка — в onMessage
+              if (this.chatId == null) {
+                this.chatId = msg.chat.id;
+                try { fs.writeFileSync(this.chatFile, JSON.stringify({ chatId: msg.chat.id, at: Date.now() })); } catch { /* noop */ }
+                this.log(`чат владельца закреплён: ${msg.chat.id}`);
+              }
+              if (msg.chat.id === this.chatId && this.onMessage) await this.onMessage(msg);
+              else if (!this.onMessage) await this.handleMessage(msg); // легаси-режим без обработчика
+            }
           }
         } catch {
           await new Promise((r) => setTimeout(r, 3_000));

@@ -12,6 +12,8 @@ export interface SessionItem {
 export interface SetupState {
   bridge: { ok: boolean; mode: string; dbOk: boolean };
   ownerPaired: boolean;
+  billing?: { pro: boolean; freeMinutes: number };
+  tunnel?: { url: string | null; botChatPaired: boolean; botConflict: boolean };
   bot: {
     verified: boolean; id: string | null; username: string | null; displayName: string | null;
     linkedInZcode: boolean; enabledInZcode: boolean; polling: boolean;
@@ -335,6 +337,8 @@ export class DemoClient {
     return {
       bridge: { ok: true, mode: "demo", dbOk: true },
       ownerPaired: true,
+      billing: { pro: false, freeMinutes: 60 },
+      tunnel: { url: "https://demo.trycloudflare.com", botChatPaired: true, botConflict: false },
       bot: { verified: true, id: "7000000001", username: "demo_helper_bot", displayName: "Demo Helper", linkedInZcode: false, enabledInZcode: false, polling: false },
     };
   }
